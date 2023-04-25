@@ -108,7 +108,7 @@ endif()
 # COMPILER SETUP
 # #####################################################################################################################
 if(NOT DEFINED BUSTUB_SANITIZER)
-        set(BUSTUB_SANITIZER address)
+        set(BUSTUB_SANITIZER address)   # q:这里的address是什么意思？a：内存泄漏检测
 endif()
 
 message("Build mode: ${CMAKE_BUILD_TYPE}")
