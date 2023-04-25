@@ -15,16 +15,17 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
         set(CMAKE_BUILD_TYPE "Debug")
 endif()
 
+# 添加编译选项、链接选项，用于允许抛出异常
 if(EMSCRIPTEN)
         add_compile_options(-fexceptions)
         add_link_options(-fexceptions)
 endif()
 
-# People keep running CMake in the wrong folder, completely nuking their project or creating weird bugs.
-# This checks if you're running CMake from a folder that already has CMakeLists.txt.
-# Importantly, this catches the common case of running it from the root directory.
+# 防止在源代码目录中构建
+# TO_CMAKE_PATH: 将路径转换为CMake格式 q:如果第二个字符串的路径不存在，那么这个变量会是空的吗？a：不会
 file(TO_CMAKE_PATH "${PROJECT_BINARY_DIR}/CMakeLists.txt" PATH_TO_CMAKELISTS_TXT)
 
+# 检查该路径指向的文件是否存在
 if(EXISTS "${PATH_TO_CMAKELISTS_TXT}")
         message(FATAL_ERROR "Run CMake from a build subdirectory! \"mkdir build ; cd build ; cmake ..\" \
     Some junk files were created in this folder (CMakeCache.txt, CMakeFiles); you should delete those.")
