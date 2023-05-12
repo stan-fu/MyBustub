@@ -47,7 +47,7 @@ class TrieNode {
   TrieNode() = default;
 
   // Create a TrieNode with some children.
-  explicit TrieNode(std::map<char, std::shared_ptr<const TrieNode>> children) : children_(std::move(children)) {}
+  explicit TrieNode(std::map<char, std::shared_ptr<TrieNode>> children) : children_(std::move(children)) {}
 
   virtual ~TrieNode() = default;
 
@@ -61,7 +61,7 @@ class TrieNode {
   virtual auto Clone() const -> std::unique_ptr<TrieNode> { return std::make_unique<TrieNode>(children_); }
 
   // A map of children, where the key is the next character in the key, and the value is the next TrieNode.
-  std::map<char, std::shared_ptr<const TrieNode>> children_;
+  std::map<char, std::shared_ptr<TrieNode>> children_;
 
   // Indicates if the node is the terminal node.
   bool is_value_node_{false};
@@ -78,7 +78,7 @@ class TrieNodeWithValue : public TrieNode {
   explicit TrieNodeWithValue(std::shared_ptr<T> value) : value_(std::move(value)) { this->is_value_node_ = true; }
 
   // Create a trie node with children and a value.
-  TrieNodeWithValue(std::map<char, std::shared_ptr<const TrieNode>> children, std::shared_ptr<T> value)
+  TrieNodeWithValue(std::map<char, std::shared_ptr<TrieNode>> children, std::shared_ptr<T> value)
       : TrieNode(std::move(children)), value_(std::move(value)) {
     this->is_value_node_ = true;
   }
@@ -100,10 +100,10 @@ class TrieNodeWithValue : public TrieNode {
 class Trie {
  private:
   // The root of the trie.
-  std::shared_ptr<const TrieNode> root_{nullptr};
+  std::shared_ptr<TrieNode> root_{std::make_shared<TrieNode>()};
 
   // Create a new trie with the given root.
-  explicit Trie(std::shared_ptr<const TrieNode> root) : root_(std::move(root)) {}
+  explicit Trie(std::shared_ptr<TrieNode> root) : root_(std::move(root)) {}
 
  public:
   // Create an empty trie.
@@ -119,11 +119,11 @@ class Trie {
   // Put a new key-value pair into the trie. If the key already exists, overwrite the value.
   // Returns the new trie.
   template <class T>
-  auto Put(std::string_view key, T value) const -> Trie;
+  auto Put(std::string_view key, T value) -> Trie;
 
   // Remove the key from the trie. If the key does not exist, return the original trie.
   // Otherwise, returns the new trie.
-  auto Remove(std::string_view key) const -> Trie;
+  auto Remove(std::string_view key) -> Trie;
 };
 
 }  // namespace bustub

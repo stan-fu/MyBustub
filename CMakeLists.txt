@@ -16,13 +16,13 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 # 添加编译选项、链接选项，用于允许抛出异常
-if(EMSCRIPTEN)
-        add_compile_options(-fexceptions)
+if(EMSCRIPTEN)  # EMSCRIPTEN：将C/C++编译为asm.js、WebAssembly字节码的工具链，用于在浏览器中快速运行C/C++程序
+        add_compile_options(-fexceptions) # q:这里的-fexceptions是什么意思？a：允许抛出异常
         add_link_options(-fexceptions)
 endif()
 
 # 防止在源代码目录中构建
-# TO_CMAKE_PATH: 将路径转换为CMake格式 q:如果第二个字符串的路径不存在，那么这个变量会是空的吗？a：不会
+# TO_CMAKE_PATH: 将路径转换为CMake格式
 file(TO_CMAKE_PATH "${PROJECT_BINARY_DIR}/CMakeLists.txt" PATH_TO_CMAKELISTS_TXT)
 
 # 检查该路径指向的文件是否存在
@@ -93,7 +93,7 @@ else()
         message(STATUS "BusTub/main found clang-apply-replacements at ${CLANG_APPLY_REPLACEMENTS_BIN}")
 endif()
 
-# cpplint
+# cpplint 静态代码检查工具
 find_program(CPPLINT_BIN
         NAMES cpplint cpplint.py
         HINTS "${BUSTUB_BUILD_SUPPORT_DIR}")
@@ -115,9 +115,11 @@ message("Build mode: ${CMAKE_BUILD_TYPE}")
 message("${BUSTUB_SANITIZER} sanitizer will be enabled in debug mode.")
 
 # Compiler flags.
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wall -Wextra -Werror")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wall -Wextra -Werror -fno-limit-debug-info")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wno-unused-parameter -Wno-attributes") # TODO: remove
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -ggdb -fsanitize=${BUSTUB_SANITIZER} -fno-omit-frame-pointer -fno-optimize-sibling-calls")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -ggdb -fsanitize=${BUSTUB_SANITIZER} -fsanitize=leak -fno-omit-frame-pointer -fno-optimize-sibling-calls")
+
+
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 message(STATUS "CMAKE_CXX_FLAGS: ${CMAKE_CXX_FLAGS}")
@@ -126,9 +128,9 @@ message(STATUS "CMAKE_EXE_LINKER_FLAGS: ${CMAKE_EXE_LINKER_FLAGS}")
 message(STATUS "CMAKE_SHARED_LINKER_FLAGS: ${CMAKE_SHARED_LINKER_FLAGS}")
 
 # Output directory.
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)     # 静态库
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)     # 动态库
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)     # 可执行文件
 
 # Includes.
 set(BUSTUB_SRC_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/src/include)
@@ -176,8 +178,8 @@ add_custom_target(format ${BUSTUB_BUILD_SUPPORT_DIR}/run_clang_format.py
         ${BUSTUB_BUILD_SUPPORT_DIR}/clang_format_exclusions.txt
         --source_dirs
         ${BUSTUB_FORMAT_DIRS}
-        --fix
-        --quiet
+        --fix                   # 自动修复格式错误
+        --quiet                 # 输出的日志级别，不输出日志
 )
 
 # Runs clang format and exits with a non-zero exit code if any files need to be reformatted
