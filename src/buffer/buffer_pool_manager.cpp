@@ -54,6 +54,7 @@ auto BufferPoolManager::NewPage(page_id_t *page_id) -> Page * {
 
   *page_id = AllocatePage();
   pages_[frame_id].page_id_ = *page_id;
+  disk_manager_->ReadPage(*page_id, pages_[frame_id].data_);
   page_table_[*page_id] = frame_id;
   replacer_->RecordAccess(frame_id);
   replacer_->SetEvictable(frame_id, false);
