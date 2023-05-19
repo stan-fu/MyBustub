@@ -12,12 +12,14 @@
 
 #pragma once
 
+#include <functional>
 #include <limits>
 #include <list>
+#include <memory>
 #include <mutex>  // NOLINT
+#include <queue>
 #include <unordered_map>
 #include <vector>
-
 #include "common/config.h"
 #include "common/macros.h"
 
@@ -29,11 +31,44 @@ class LRUKNode {
  private:
   /** History of last seen K timestamps of this page. Least recent timestamp stored in front. */
   // Remove maybe_unused if you start using them. Feel free to change the member variables as you want.
+  size_t k_;
+  frame_id_t fid_;
+  bool is_evictable_{false};
 
-  [[maybe_unused]] std::list<size_t> history_;
-  [[maybe_unused]] size_t k_;
-  [[maybe_unused]] frame_id_t fid_;
-  [[maybe_unused]] bool is_evictable_{false};
+ public:
+  std::list<size_t> history_;
+  LRUKNode() = default;
+  LRUKNode(frame_id_t fid, size_t k, size_t timestamp) : k_(k), fid_(fid) { history_.push_front(timestamp); }
+
+  void Access(size_t timestamp) {
+    if (history_.size() < k_) {
+      history_.push_front(timestamp);
+    } else {
+      history_.pop_back();
+      history_.push_front(timestamp);
+    }
+  }
+
+  auto GetFrameID() -> size_t { return fid_; }
+
+  auto IsEvictable() -> bool { return is_evictable_; }
+
+  void SetEvictable(bool is_evictable) { is_evictable_ = is_evictable; }
+
+  /**
+   * @brief return true if this.k-distance < that.k-distance
+   */
+  auto operator<(const LRUKNode &that) const -> bool {
+    size_t this_access_cnt = this->history_.size();
+    size_t that_access_cnt = that.history_.size();
+    if (this_access_cnt < k_ && that_access_cnt == k_) {
+      return false;
+    }
+    if (this_access_cnt == k_ && that_access_cnt < k_) {
+      return true;
+    }
+    return that.history_.back() < this->history_.back();
+  }
 };
 
 /**
@@ -150,12 +185,24 @@ class LRUKReplacer {
  private:
   // TODO(student): implement me! You can replace these member variables as you like.
   // Remove maybe_unused if you start using them.
-  [[maybe_unused]] std::unordered_map<frame_id_t, LRUKNode> node_store_;
-  [[maybe_unused]] size_t current_timestamp_{0};
-  [[maybe_unused]] size_t curr_size_{0};
-  [[maybe_unused]] size_t replacer_size_;
-  [[maybe_unused]] size_t k_;
-  [[maybe_unused]] std::mutex latch_;
+  struct LRUKHeap {
+    LRUKReplacer &replacer_;
+    std::vector<frame_id_t> frames_;
+
+    explicit LRUKHeap(LRUKReplacer &replacer) : replacer_(replacer) {}
+    void Heapify(int start, int end);
+    void Insert(frame_id_t frame_id);
+    void Remove(frame_id_t frame_id);
+    void Pop(frame_id_t *frame_id);
+  };
+
+  std::unordered_map<frame_id_t, LRUKNode> node_store_;
+  size_t current_timestamp_{0};
+  size_t curr_size_{0};   // evictable number of frames
+  size_t replacer_size_;  // maximum number of frames
+  size_t k_;
+  std::mutex latch_;
+  LRUKHeap evictable_frames_;  // only insert evictable frames
 };
 
 }  // namespace bustub
