@@ -58,6 +58,8 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   auto GetNextPageId() const -> page_id_t;
   void SetNextPageId(page_id_t next_page_id);
   auto KeyAt(int index) const -> KeyType;
+  auto Insert(KeyType &key, ValueType &value) -> bool;
+  void Split(BPlusTreeLeafPage &next_page, KeyType &key, ValueType &value);
 
   /**
    * @brief for test only return a string representing all keys in
@@ -87,6 +89,6 @@ class BPlusTreeLeafPage : public BPlusTreePage {
  private:
   page_id_t next_page_id_;
   // Flexible array member for page data.
-  MappingType array_[0];
+  MappingType array_[LEAF_PAGE_SIZE];
 };
 }  // namespace bustub

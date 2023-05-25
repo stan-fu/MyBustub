@@ -61,10 +61,19 @@ class BPlusTreeInternalPage : public BPlusTreePage {
   void SetKeyAt(int index, const KeyType &key);
 
   /**
+   * @brief Insert a key-value pair into internal page
+   * 
+   */
+  void Insert(const KeyType& key, const ValueType& value);
+
+  /**
    *
    * @param value the value to search for
    */
   auto ValueIndex(const ValueType &value) const -> int;
+
+
+  
 
   /**
    *
@@ -101,6 +110,6 @@ class BPlusTreeInternalPage : public BPlusTreePage {
 
  private:
   // Flexible array member for page data.
-  MappingType array_[0];
+  MappingType array_[INTERNAL_PAGE_SIZE];
 };
 }  // namespace bustub

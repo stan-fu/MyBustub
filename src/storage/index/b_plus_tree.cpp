@@ -26,7 +26,11 @@ BPLUSTREE_TYPE::BPlusTree(std::string name, page_id_t header_page_id, BufferPool
  * Helper function to decide whether current b+tree is empty
  */
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::IsEmpty() const -> bool { return true; }
+auto BPLUSTREE_TYPE::IsEmpty() const -> bool {
+  auto header_guard = bpm_->FetchPageBasic(header_page_id_);
+  auto header_page = header_guard.As<BPlusTreeHeaderPage>();
+  return header_page->root_page_id_ == INVALID_PAGE_ID;
+}
 /*****************************************************************************
  * SEARCH
  *****************************************************************************/
@@ -39,7 +43,35 @@ INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result, Transaction *txn) -> bool {
   // Declaration of context instance.
   Context ctx;
-  (void)ctx;
+  auto header_guard = bpm_->FetchPageBasic(header_page_id_);
+  auto header_page = header_guard.As<BPlusTreeHeaderPage>();
+
+  auto guard = bpm_->FetchPageBasic(header_page->root_page_id_);
+  const BPlusTreePage *page = guard.As<BPlusTreePage>();
+  while (!page->IsLeafPage()) {
+    page = reinterpret_cast<const BPlusTreeInternalPage *>(page);
+    for (int i = 1; i < page->GetSize(); i++) {
+      if (page->KeyAt(i) > key) {
+        guard = bpm_->FetchPageBasic(page->ValueAt(i - 1));
+        page = guard.As<BPlusTreePage>();
+        break;
+      }
+      if (i == page->GetSize() - 1) {
+        guard = bpm_->FetchPageBasic(page->ValueAt(i));
+        page = guard.As<BPlusTreePage>();
+        break;
+      }
+    }
+  }
+
+  page = reinterpret_cast<const BPlusTreeLeafPage *>();
+  for (int i = 0; i < page->GetSize(); i++) {
+    if (page->KeyAt(i) == key) {
+      result->push_back(page->ValueAt(i));
+      return true;
+    }
+  }
+
   return false;
 }
 
@@ -57,7 +89,37 @@ INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transaction *txn) -> bool {
   // Declaration of context instance.
   Context ctx;
-  (void)ctx;
+  auto header_guard = bpm_->FetchPageBasic(header_page_id_);
+  auto header_page = header_guard.As<BPlusTreeHeaderPage>();
+
+  // current tree is empty
+  if (header_page->root_page_id_ == INVALID_PAGE_ID) {
+    page_id_t page_id;
+    auto guard = bpm_->NewPageGuarded(&page_id);
+    BPlusTreeLeafPage *page = guard.AsMut<BPlusTreeLeafPage>();
+    page->Init(leaf_max_size_);
+    page->Insert(key, value);
+    header_page->root_page_id_ = page_id;
+    return true;
+  }
+
+  auto guard = bpm_->FetchPageBasic(header_page->root_page_id_);
+  BPlusTreePage *page = guard.AsMut<BPlusTreePage>();
+  if (page->IsLeafPage()) {
+    page = reinterpret_cast<BPlusTreeLeafPage *>(page);
+    if (page->GetSize() == page->GetMaxSize()) {
+      page_id_t new_page_id;
+      auto new_guard = bpm_->NewPageGuarded(&new_page_id);
+      BPlusTreeLeafPage* new_page = new_guard.AsMut<BPlusTreeLeafPage>();
+      new_page->Init(leaf_max_size_);
+      page->SetNextPageId(new_page_id);
+      
+    } else {
+      page->Insert(key, value);
+    }
+    return true;
+  }
+
   return false;
 }
 
@@ -109,7 +171,11 @@ auto BPLUSTREE_TYPE::End() -> INDEXITERATOR_TYPE { return INDEXITERATOR_TYPE(); 
  * @return Page id of the root of this tree
  */
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::GetRootPageId() -> page_id_t { return 0; }
+auto BPLUSTREE_TYPE::GetRootPageId() -> page_id_t {
+  auto guard = bpm_->FetchPageRead(header_page_id_);
+  auto root_page = guard.As<BPlusTreeHeaderPage>();
+  return root_page->root_page_id_;
+}
 
 /*****************************************************************************
  * UTILITIES AND DEBUG
