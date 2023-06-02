@@ -62,9 +62,9 @@ class BPlusTreeInternalPage : public BPlusTreePage {
 
   /**
    * @brief Insert a key-value pair into internal page
-   * 
+   *
    */
-  void Insert(const KeyType& key, const ValueType& value);
+  auto Insert(const KeyType &key, const ValueType &value, KeyComparator &comp) -> bool;
 
   /**
    *
@@ -72,8 +72,14 @@ class BPlusTreeInternalPage : public BPlusTreePage {
    */
   auto ValueIndex(const ValueType &value) const -> int;
 
+  /**
+   * @brief copy key-value pairs to this page
+   * @param pairs
+   * @param size
+   */
+  void ClearAndCopy(const std::vector<MappingType> &pairs, int begin, int end);
 
-  
+  void GetAllPairs(std::vector<MappingType> &pairs);
 
   /**
    *

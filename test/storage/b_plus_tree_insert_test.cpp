@@ -56,6 +56,8 @@ TEST(BPlusTreeTests, InsertTest1) {
   ASSERT_EQ(root_as_leaf->GetSize(), 1);
   ASSERT_EQ(comparator(root_as_leaf->KeyAt(0), index_key), 0);
 
+  tree.DrawBPlusTree();
+
   bpm->UnpinPage(root_page_id, false);
   bpm->UnpinPage(HEADER_PAGE_ID, true);
   delete transaction;
@@ -86,6 +88,7 @@ TEST(BPlusTreeTests, DISABLED_InsertTest2) {
     index_key.SetFromInteger(key);
     tree.Insert(index_key, rid, transaction);
   }
+  tree.DrawBPlusTree();
 
   std::vector<RID> rids;
   for (auto key : keys) {

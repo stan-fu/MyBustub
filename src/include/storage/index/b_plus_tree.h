@@ -53,6 +53,9 @@ class Context {
   // You may want to use this when getting value, but not necessary.
   std::deque<ReadPageGuard> read_set_;
 
+  // only for checkpoint-1
+  std::deque<BasicPageGuard> access_record_;
+
   auto IsRootPage(page_id_t page_id) -> bool { return page_id == root_page_id_; }
 };
 
@@ -63,8 +66,7 @@ INDEX_TEMPLATE_ARGUMENTS
 class BPlusTree {
   using InternalPage = BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator>;
   using LeafPage = BPlusTreeLeafPage<KeyType, ValueType, KeyComparator>;
-  using KeyComparator = std::function<bool(const KeyType&, const KeyType&)>;
-  
+
  public:
   explicit BPlusTree(std::string name, page_id_t header_page_id, BufferPoolManager *buffer_pool_manager,
                      const KeyComparator &comparator, int leaf_max_size = LEAF_PAGE_SIZE,
@@ -118,6 +120,8 @@ class BPlusTree {
   void RemoveFromFile(const std::string &file_name, Transaction *txn = nullptr);
 
  private:
+  void InsertInParent(Context& context, KeyType& key, page_id_t right_child_pid);
+
   /* Debug Routines for FREE!! */
   void ToGraph(page_id_t page_id, const BPlusTreePage *page, std::ofstream &out);
 
@@ -130,7 +134,6 @@ class BPlusTree {
    * @return PrintableNode
    */
   auto ToPrintableBPlusTree(page_id_t root_id) -> PrintableBPlusTree;
-
   // member variable
   std::string index_name_;
   BufferPoolManager *bpm_;

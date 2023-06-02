@@ -41,33 +41,30 @@ auto BPLUSTREE_TYPE::IsEmpty() const -> bool {
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result, Transaction *txn) -> bool {
-  // Declaration of context instance.
-  Context ctx;
-  auto header_guard = bpm_->FetchPageBasic(header_page_id_);
-  auto header_page = header_guard.As<BPlusTreeHeaderPage>();
-
-  auto guard = bpm_->FetchPageBasic(header_page->root_page_id_);
-  const BPlusTreePage *page = guard.As<BPlusTreePage>();
+  page_id_t root_id = GetRootPageId();
+  auto guard = bpm_->FetchPageBasic(root_id);
+  const auto *page = guard.As<BPlusTreePage>();
   while (!page->IsLeafPage()) {
-    page = reinterpret_cast<const BPlusTreeInternalPage *>(page);
-    for (int i = 1; i < page->GetSize(); i++) {
-      if (page->KeyAt(i) > key) {
-        guard = bpm_->FetchPageBasic(page->ValueAt(i - 1));
-        page = guard.As<BPlusTreePage>();
-        break;
-      }
-      if (i == page->GetSize() - 1) {
-        guard = bpm_->FetchPageBasic(page->ValueAt(i));
+    auto internal_page = reinterpret_cast<const InternalPage *>(page);
+    int page_size = internal_page->GetSize();
+    for (int i = 1; i < page_size; i++) {
+      if (comparator_(key, internal_page->KeyAt(i)) < 0) {
+        guard = bpm_->FetchPageBasic(internal_page->ValueAt(i - 1));
         page = guard.As<BPlusTreePage>();
         break;
       }
     }
+    if (comparator_(key, internal_page->KeyAt(page_size-1)) > 0) {
+      guard = bpm_->FetchPageBasic(internal_page->ValueAt(page_size-1));
+      page = guard.As<BPlusTreePage>();
+      break;
+    }
   }
 
-  page = reinterpret_cast<const BPlusTreeLeafPage *>();
-  for (int i = 0; i < page->GetSize(); i++) {
-    if (page->KeyAt(i) == key) {
-      result->push_back(page->ValueAt(i));
+  auto leaf_page = reinterpret_cast<const LeafPage *>(page);
+  for (int i = 0; i < leaf_page->GetSize(); i++) {
+    if (comparator_(leaf_page->KeyAt(i), key) == 0) {
+      result->push_back(leaf_page->ValueAt(i));
       return true;
     }
   }
@@ -89,38 +86,122 @@ INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transaction *txn) -> bool {
   // Declaration of context instance.
   Context ctx;
-  auto header_guard = bpm_->FetchPageBasic(header_page_id_);
-  auto header_page = header_guard.As<BPlusTreeHeaderPage>();
+  page_id_t root_id = GetRootPageId();
+  ctx.root_page_id_ = root_id;
 
-  // current tree is empty
-  if (header_page->root_page_id_ == INVALID_PAGE_ID) {
+  // create an empty leaf node, which is also the root
+  if (root_id == INVALID_PAGE_ID) {
     page_id_t page_id;
     auto guard = bpm_->NewPageGuarded(&page_id);
-    BPlusTreeLeafPage *page = guard.AsMut<BPlusTreeLeafPage>();
+    auto *page = guard.AsMut<LeafPage>();
+    auto header_guard = bpm_->FetchPageBasic(header_page_id_);
+    auto header_page = header_guard.AsMut<BPlusTreeHeaderPage>();
     page->Init(leaf_max_size_);
-    page->Insert(key, value);
+    page->Insert(key, value, comparator_);
     header_page->root_page_id_ = page_id;
     return true;
   }
 
-  auto guard = bpm_->FetchPageBasic(header_page->root_page_id_);
-  BPlusTreePage *page = guard.AsMut<BPlusTreePage>();
-  if (page->IsLeafPage()) {
-    page = reinterpret_cast<BPlusTreeLeafPage *>(page);
-    if (page->GetSize() == page->GetMaxSize()) {
-      page_id_t new_page_id;
-      auto new_guard = bpm_->NewPageGuarded(&new_page_id);
-      BPlusTreeLeafPage* new_page = new_guard.AsMut<BPlusTreeLeafPage>();
-      new_page->Init(leaf_max_size_);
-      page->SetNextPageId(new_page_id);
-      
-    } else {
-      page->Insert(key, value);
+  // find the leaf node that should contain key
+  auto guard = bpm_->FetchPageBasic(root_id);
+  auto *page = guard.AsMut<BPlusTreePage>();
+
+  while (!page->IsLeafPage()) {
+    ctx.access_record_.push_back(std::move(guard));
+    auto internal_page = reinterpret_cast<InternalPage *>(page);
+    int page_size = internal_page->GetSize();
+    for (int i = 1; i < page_size; i++) {
+      if (comparator_(key, internal_page->KeyAt(i)) < 0) {
+        guard = bpm_->FetchPageBasic(internal_page->ValueAt(i - 1));
+        page = guard.AsMut<BPlusTreePage>();
+        break;
+      }
     }
-    return true;
+    if (comparator_(key, internal_page->KeyAt(page_size-1)) > 0) {
+      guard = bpm_->FetchPageBasic(internal_page->ValueAt(page_size-1));
+      page = guard.AsMut<BPlusTreePage>();
+      break;
+    }
+  }
+  ctx.access_record_.push_back(std::move(guard));
+  if (!page->IsFull()) {
+    auto leaf_page = reinterpret_cast<LeafPage *>(page);
+    return leaf_page->Insert(key, value, comparator_);
   }
 
-  return false;
+  // split if page is full
+  page_id_t sibling_pid;
+  auto sibling_guard = bpm_->NewPageGuarded(&sibling_pid);
+  auto* sibling_page = sibling_guard.AsMut<LeafPage>();
+  sibling_page->Init(leaf_max_size_);
+  std::vector<MappingType> tmp_block;
+  auto leaf_page = reinterpret_cast<LeafPage *>(page);
+  leaf_page->GetAllPairs(tmp_block);
+  size_t block_size = tmp_block.size();
+  for (size_t i = 0; i < block_size; i++) {
+    if (comparator_(key, tmp_block[i].first) < 0) {
+      tmp_block.insert(tmp_block.begin() + i, {key, value});
+      break;
+    }
+    if (comparator_(key, tmp_block[i].first) == 0) {
+      return false;
+    }
+  }
+  if (comparator_(key, tmp_block[block_size - 1].first) > 0) {
+    tmp_block.push_back({key, value});
+  }
+  leaf_page->ClearAndCopy(tmp_block, 0, leaf_page->GetMinSize());
+  sibling_page->ClearAndCopy(tmp_block, leaf_page->GetMinSize(), static_cast<int>(block_size));
+  auto k0 = sibling_page->KeyAt(0);
+  InsertInParent(ctx, k0, sibling_pid);
+  return true;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void BPLUSTREE_TYPE::InsertInParent(Context &context, KeyType& key, page_id_t right_child_pid) {
+  auto left_child_guard = std::move(context.access_record_.back());
+  auto left_child_pid = left_child_guard.PageId();
+  context.access_record_.pop_back();
+  if (context.IsRootPage(left_child_pid)) {
+    page_id_t parent_pid;
+    auto parent_guard = bpm_->NewPageGuarded(&parent_pid);  // create new root
+    InternalPage* parent_page = parent_guard.AsMut<InternalPage>();
+    parent_page->Init(internal_max_size_);
+    parent_page->Insert(key, left_child_pid, comparator_);
+    parent_page->Insert(key, right_child_pid, comparator_);
+    auto header_guard = bpm_->FetchPageBasic(header_page_id_);
+    auto header_page = header_guard.AsMut<BPlusTreeHeaderPage>();
+    header_page->root_page_id_ = parent_pid;
+    return;
+  }
+
+  auto parent_guard = std::move(context.access_record_.back());
+  context.access_record_.pop_back();
+  InternalPage* parent_page = parent_guard.AsMut<InternalPage>();
+  if (!parent_page->IsFull()) {
+    parent_page->Insert(key, right_child_pid, comparator_);
+  } else {
+    page_id_t uncle_pid;
+    auto uncle_guard = bpm_->NewPageGuarded(&uncle_pid);
+    InternalPage*uncle_page = uncle_guard.AsMut<InternalPage>();
+    uncle_page->Init(internal_max_size_);
+    std::vector<std::pair<KeyType, page_id_t>> tmp_block;
+    parent_page->GetAllPairs(tmp_block);
+    size_t block_size = tmp_block.size();
+    for (size_t i = 1; i < block_size; i++) {
+      if (comparator_(key, tmp_block[i].first) < 0) {
+        tmp_block.insert(tmp_block.begin() + i, {key, right_child_pid});
+        break;
+      }
+    }
+    if (comparator_(key, tmp_block[block_size - 1].first) > 0) {
+      tmp_block.push_back({key, right_child_pid});
+    }
+    parent_page->ClearAndCopy(tmp_block, 0, parent_page->GetMinSize());
+    uncle_page->ClearAndCopy(tmp_block, parent_page->GetMinSize(), tmp_block.size());
+    auto key_to_uncle = uncle_page->KeyAt(0);
+    InsertInParent(context, key_to_uncle, uncle_pid);
+  }
 }
 
 /*****************************************************************************

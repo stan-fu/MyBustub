@@ -27,7 +27,7 @@ namespace bustub {
  */
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_LEAF_PAGE_TYPE::Init(int max_size) {
-  BUSTUB_ASSERT(max_size <= LEAF_PAGE_SIZE, "max_size init error");
+  BUSTUB_ASSERT(max_size <= (int)LEAF_PAGE_SIZE, "max_size init error");
   SetPageType(IndexPageType::LEAF_PAGE);
   SetSize(0);
   SetMaxSize(max_size);
@@ -52,35 +52,51 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::KeyAt(int index) const -> KeyType {
   return array_[index].first;
 }
 
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::ValueAt(int index) const -> ValueType {
+  BUSTUB_ASSERT(index < GetSize(), "index invalid");
+  return array_[index].second;
+}
+
 /**
- * @brief Helper method to insert key-value pair into leaf page, current page size
- * must not be full
+ * @brief Helper method to insert key-value pair into leaf page, current page size must not be full
  *
  * @return false if exist duplicated key, else true
  */
 INDEX_TEMPLATE_ARGUMENTS
-auto B_PLUS_TREE_LEAF_PAGE_TYPE::Insert(KeyType &key, ValueType &value) -> bool {
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::Insert(const KeyType &key, const ValueType &value, KeyComparator &comp) -> bool {
   BUSTUB_ASSERT(GetSize() < GetMaxSize(), "page size exceed max size limit");
   IncreaseSize(1);
   for (int i = GetSize() - 2; i >= 0; i--) {
-    if (array_[i].first == key) {
+    if (comp(key, array_[i].first) == 0) {
       return false;
     }
-    if (array_[i].first < key) {
+    if (comp(key, array_[i].first) > 0) {
       array_[i + 1] = {key, value};
       return true;
     }
-    array_[i + 1] = array[i];
+    array_[i + 1] = array_[i];
   }
   array_[0] = {key, value};
   return true;
 }
 
+
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_LEAF_PAGE_TYPE::Split(BPlusTreeLeafPage &next_page, KeyType &key, ValueType &value) {
-  BUSTUB_ASSERT(size_ != max_size_, "split error, page is not full");
-  int if (array_[GetMinSize()].first <)
+void B_PLUS_TREE_LEAF_PAGE_TYPE::ClearAndCopy(const std::vector<MappingType>& pairs, int begin, int end) {
+  for (int i = begin; i < end; i++) {
+    array_[i] = pairs[i];
+  }
+  SetSize(end-begin);
 }
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_LEAF_PAGE_TYPE::GetAllPairs(std::vector<MappingType>& pairs){
+  for (int i = 0; i < GetSize(); i++) {
+    pairs.push_back(array_[i]);
+  }
+}
+
 
 template class BPlusTreeLeafPage<GenericKey<4>, RID, GenericComparator<4>>;
 template class BPlusTreeLeafPage<GenericKey<8>, RID, GenericComparator<8>>;

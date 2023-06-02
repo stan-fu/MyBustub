@@ -26,8 +26,8 @@ namespace bustub {
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Init(int max_size) {
   SetPageType(IndexPageType::INTERNAL_PAGE);
-  SetSize(0);
   SetMaxSize(max_size);
+  SetSize(0);
 }
 /*
  * Helper method to get/set the key associated with input "index"(a.k.a
@@ -43,34 +43,49 @@ INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) {
   BUSTUB_ASSERT(index > 0 && index < GetSize(), "index invalid");
   array_[index].first = key;
-  
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Insert(const KeyType& key, const ValueType& value) {
-  if (GetSize() == GetMaxSize()) {
-    int mid_index = GetMinSize();
-    if (key > array_[mid_index]) {
-      page_id_t new_page_id;
-      auto guard = bpm
-    } else {
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Insert(const KeyType &key, const ValueType &value, KeyComparator &comp) -> bool {
+  BUSTUB_ASSERT(GetSize() < GetMaxSize(), "page size exceed max size limit");
+  IncreaseSize(1);
+  if (GetSize() == 1) {
+    array_[0] = {key, value};
+    return true;
+  }
 
+  for (int i = GetSize() - 2; i > 0; i--) {
+    if (comp(key, array_[i].first) == 0) {
+      return false;
     }
-  } else {
-    IncreaseSize(1);
-    for (int i = GetSize()-2; i >= 0; i--) {
-      if (key > array_[i].first) {
-        array_[i+1] = {key, value};
-        return;
-      } 
-      array_[i+1] = array[i];
+    if (comp(key, array_[i].first) > 0) {
+      array_[i + 1] = {key, value};
+      return true;
     }
+    array_[i + 1] = array_[i];
+  }
+  array_[1] = {key, value}; // insert from leaf page, split new page must bigger than array_[0]
+  return true;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::ClearAndCopy(const std::vector<MappingType> &pairs, int begin, int end) {
+  for (int i = begin; i < end; i++) {
+    array_[i] = pairs[i];
+  }
+  SetSize(end - begin);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::GetAllPairs(std::vector<MappingType> &pairs) {
+  for (int i = 0; i < GetSize(); i++) {
+    pairs.push_back(array_[i]);
   }
 }
 
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueIndex(const ValueType &value) const -> int {
-  for (int i = 0; i < (int)INTERNAL_PAGE_SIZE; i++) {
+  for (int i = 0; i < static_cast<int>(INTERNAL_PAGE_SIZE); i++) {
     if (array_[i].second == value) {
       return i;
     }
@@ -85,7 +100,6 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueIndex(const ValueType &value) const ->
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueAt(int index) const -> ValueType {
-  BUSTUB_ASSERT(index > 0 && index < GetSize(), "index invalid");
   return array_[index].second;
 }
 
