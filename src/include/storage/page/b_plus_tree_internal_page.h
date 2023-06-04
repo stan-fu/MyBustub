@@ -12,7 +12,7 @@
 
 #include <queue>
 #include <string>
-
+#include <vector>
 #include "storage/page/b_plus_tree_page.h"
 
 namespace bustub {
@@ -73,13 +73,16 @@ class BPlusTreeInternalPage : public BPlusTreePage {
   auto ValueIndex(const ValueType &value) const -> int;
 
   /**
-   * @brief copy key-value pairs to this page
-   * @param pairs
-   * @param size
+   * @brief Helper method to reallocate array[begin:end] to array_;
+   *
    */
-  void ClearAndCopy(const std::vector<MappingType> &pairs, int begin, int end);
+  void Reallocate(const std::vector<MappingType> &array, int begin, int end);
 
-  void GetAllPairs(std::vector<MappingType> &pairs);
+  /**
+   * @brief Helper method to accquire array_ from leaf page
+   *
+   */
+  void AccquireArray(std::vector<MappingType> &array);
 
   /**
    *

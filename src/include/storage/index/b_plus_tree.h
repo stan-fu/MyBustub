@@ -120,7 +120,7 @@ class BPlusTree {
   void RemoveFromFile(const std::string &file_name, Transaction *txn = nullptr);
 
  private:
-  void InsertInParent(Context& context, KeyType& key, page_id_t right_child_pid);
+  void InsertInParent(Context &context, KeyType &key, page_id_t right_child_pid);
 
   /* Debug Routines for FREE!! */
   void ToGraph(page_id_t page_id, const BPlusTreePage *page, std::ofstream &out);
@@ -142,6 +142,7 @@ class BPlusTree {
   int leaf_max_size_;
   int internal_max_size_;
   page_id_t header_page_id_;
+  INDEXITERATOR_TYPE *iterator_;
 };
 
 /**
