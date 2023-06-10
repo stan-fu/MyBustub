@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <deque>
 #include <iostream>
+#include <mutex>  // NOLINT
 #include <optional>
 #include <queue>
 #include <shared_mutex>
@@ -52,9 +53,6 @@ class Context {
 
   // You may want to use this when getting value, but not necessary.
   std::deque<ReadPageGuard> read_set_;
-
-  // only for checkpoint-1
-  std::deque<BasicPageGuard> access_record_;
 
   auto IsRootPage(page_id_t page_id) -> bool { return page_id == root_page_id_; }
 };
@@ -120,7 +118,11 @@ class BPlusTree {
   void RemoveFromFile(const std::string &file_name, Transaction *txn = nullptr);
 
  private:
-  void InsertInParent(Context &context, KeyType &key, page_id_t right_child_pid);
+  // insert [key, right_child_pid] into parent page
+  void InsertInParent(Context &ctx, const KeyType &key, page_id_t right_child_pid);
+
+  // delete [key, value] from current node in context
+  void DeleteEntry(Context &ctx, const KeyType &key);
 
   /* Debug Routines for FREE!! */
   void ToGraph(page_id_t page_id, const BPlusTreePage *page, std::ofstream &out);
@@ -142,7 +144,6 @@ class BPlusTree {
   int leaf_max_size_;
   int internal_max_size_;
   page_id_t header_page_id_;
-  INDEXITERATOR_TYPE *iterator_;
 };
 
 /**

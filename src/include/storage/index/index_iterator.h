@@ -13,8 +13,8 @@
  * For range scan of b+ tree
  */
 #pragma once
+#include <utility>
 #include "storage/page/b_plus_tree_leaf_page.h"
-
 namespace bustub {
 
 #define INDEXITERATOR_TYPE IndexIterator<KeyType, ValueType, KeyComparator>
@@ -23,7 +23,10 @@ INDEX_TEMPLATE_ARGUMENTS
 class IndexIterator {
  public:
   // you may define your own constructor based on your member variables
-  explicit IndexIterator(B_PLUS_TREE_LEAF_PAGE_TYPE *page, int index) : page_(page), index_(index) {}
+  explicit IndexIterator(BufferPoolManager *bpm, page_id_t page_id, int index)
+      : bpm_(bpm), page_id_(page_id), index_(index) {
+    guard_ = bpm_->FetchPageBasic(page_id_);
+  }
   IndexIterator(const IndexIterator &iter) = default;
   ~IndexIterator();  // NOLINT
 
@@ -33,18 +36,16 @@ class IndexIterator {
 
   auto operator++() -> IndexIterator &;
 
-  auto operator==(const IndexIterator &itr) const -> bool { return itr.page_ == page_ && itr.index_ == index_; }
+  auto operator==(const IndexIterator &itr) const -> bool { return index_ == itr.index_ && page_id_ == itr.page_id_; }
 
-  auto operator!=(const IndexIterator &itr) const -> bool { return itr.page_ != page_ || itr.index_ != index_; }
-
-  void SetEnd() { index_ = page_->GetSize(); }
+  auto operator!=(const IndexIterator &itr) const -> bool { return index_ != itr.index_ || page_id_ != itr.page_id_; }
 
  private:
-  friend class INDEXITERATOR_TYPE;
   // add your own private member variables here
-  B_PLUS_TREE_LEAF_PAGE_TYPE *page_;
-  // BufferPoolManager *bpm_;
-  size_t index_;
+  BufferPoolManager *bpm_;
+  page_id_t page_id_;
+  int index_;
+  BasicPageGuard guard_;
 };
 
 }  // namespace bustub

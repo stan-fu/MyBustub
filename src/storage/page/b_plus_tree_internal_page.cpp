@@ -46,28 +46,75 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) {
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Insert(const KeyType &key, const ValueType &value, KeyComparator &comp) -> bool {
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Find(const KeyType &key, KeyComparator &comp) const -> ValueType {
+  auto it = std::upper_bound(array_ + 1, array_ + GetSize(), key,
+                             [&](const KeyType &k, const MappingType &kv) { return comp(k, kv.first) < 0; });
+  return (it - 1)->second;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Insert(const KeyType &key, const ValueType &value, KeyComparator &comp) {
   IncreaseSize(1);
-  if (GetSize() == 1) {
-    array_[0] = {key, value};
-    return true;
+  int k = GetSize() - 2;  // index of last key
+  if (k < 1 || comp(key, array_[k].first) > 0) {
+    array_[k + 1] = {key, value};
+    return;
   }
-  // find appropriate position to insert
-  // Different from internal page, insert operation is from leaf to root, would not exist duplicated key in internal
-  // page while leaf-insert success
-  for (int i = GetSize() - 2; i > 0; i--) {
-    if (comp(key, array_[i].first) > 0) {
-      array_[i + 1] = {key, value};
-      return true;
+
+  // leaf page wouldn't occur duplicated key
+  for (; k > 0; k--) {
+    if (comp(key, array_[k].first) < 0) {
+      array_[k + 1] = array_[k];
+    } else {
+      array_[k + 1] = {key, value};
+      return;
     }
-    array_[i + 1] = array_[i];
   }
+  // insert only occur while child split, always keep new child at right, thus don't have to update array_[0]
   array_[1] = {key, value};
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Insert(const KeyType &key, const ValueType &value, int index) -> bool {
+  for (int k = GetSize() - 1; k >= index; k--) {
+    array_[k + 1] = array_[k];
+  }
+  array_[index] = {key, value};
+  IncreaseSize(1);
   return true;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Reallocate(const std::vector<MappingType> &array, int begin, int end) {
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::DeleteEntry(const KeyType &key, KeyComparator &comp) {
+  // delete key and pointer to page whose key' >= key
+  int k = 1;
+  for (; k < GetSize(); k++) {
+    if (comp(key, array_[k].first) == 0) {
+      break;
+    }
+  }
+  if (k == GetSize()) {
+    return;
+  }
+  for (; k < GetSize() - 1; k++) {
+    array_[k] = array_[k + 1];
+  }
+  IncreaseSize(-1);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::DeleteEntry(int index) {
+  if (index >= GetSize()) {
+    return;
+  }
+  for (int k = index; k < GetSize() - 1; k++) {
+    array_[k] = array_[k + 1];
+  }
+  IncreaseSize(-1);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetArray(const std::vector<MappingType> &array, int begin, int end) {
   SetSize(end - begin);
   for (int i = 0, j = begin; j < end; i++, j++) {
     array_[i] = array[j];
@@ -75,15 +122,14 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Reallocate(const std::vector<MappingType> &
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_INTERNAL_PAGE_TYPE::AccquireArray(std::vector<MappingType> &array) {
-  for (int i = 0; i < GetSize(); i++) {
-    array.push_back(array_[i]);
-  }
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::GetArray(std::vector<MappingType> &array) {
+  array.reserve(GetSize() + 1);
+  std::copy(array_, array_ + GetSize(), std::back_inserter(array));
 }
 
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueIndex(const ValueType &value) const -> int {
-  for (int i = 0; i < static_cast<int>(INTERNAL_PAGE_SIZE); i++) {
+  for (int i = 0; i < GetSize(); i++) {
     if (array_[i].second == value) {
       return i;
     }

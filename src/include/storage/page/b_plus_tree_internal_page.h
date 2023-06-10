@@ -61,10 +61,25 @@ class BPlusTreeInternalPage : public BPlusTreePage {
   void SetKeyAt(int index, const KeyType &key);
 
   /**
+   * @brief find page which contains key
+   * @return page_id
+   */
+  auto Find(const KeyType &key, KeyComparator &comp) const -> ValueType;
+
+  /**
    * @brief Insert a key-value pair into internal page
    *
    */
-  auto Insert(const KeyType &key, const ValueType &value, KeyComparator &comp) -> bool;
+  void Insert(const KeyType &key, const ValueType &value, KeyComparator &comp);
+
+  auto Insert(const KeyType &key, const ValueType &value, int index) -> bool;
+
+  /**
+   * @brief Delete specified entry in this page
+   *
+   */
+  void DeleteEntry(const KeyType &key, KeyComparator &comp);
+  void DeleteEntry(int index);
 
   /**
    *
@@ -76,13 +91,13 @@ class BPlusTreeInternalPage : public BPlusTreePage {
    * @brief Helper method to reallocate array[begin:end] to array_;
    *
    */
-  void Reallocate(const std::vector<MappingType> &array, int begin, int end);
+  void SetArray(const std::vector<MappingType> &array, int begin, int end);
 
   /**
    * @brief Helper method to accquire array_ from leaf page
    *
    */
-  void AccquireArray(std::vector<MappingType> &array);
+  void GetArray(std::vector<MappingType> &array);
 
   /**
    *

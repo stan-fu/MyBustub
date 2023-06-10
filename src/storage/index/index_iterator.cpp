@@ -3,6 +3,7 @@
  */
 #include "storage/index/index_iterator.h"
 #include <cassert>
+#include <memory>
 #include "include/common/logger.h"
 
 namespace bustub {
@@ -16,24 +17,28 @@ INDEXITERATOR_TYPE::~IndexIterator() = default;  // NOLINT
 
 INDEX_TEMPLATE_ARGUMENTS
 auto INDEXITERATOR_TYPE::IsEnd() -> bool {
-  // return page_->GetNextPageId() == INVALID_PAGE_ID && index_ == page_->GetSize();
-  return index_ == static_cast<size_t>(page_->GetSize());
+  // ReadPageGuard guard = bpm_->FetchPageRead(page_id_);
+  auto page = guard_.As<B_PLUS_TREE_LEAF_PAGE_TYPE>();
+  return page->GetNextPageId() == INVALID_PAGE_ID && index_ == page->GetSize();
 }
 
 INDEX_TEMPLATE_ARGUMENTS
 auto INDEXITERATOR_TYPE::operator*() -> const MappingType & {
-  BUSTUB_ASSERT(page_ != nullptr, "iterator invalid");
-  return page_->array_[index_];
+  // ReadPageGuard guard = bpm_->FetchPageRead(page_id_);
+  auto page = guard_.As<B_PLUS_TREE_LEAF_PAGE_TYPE>();
+  return page->array_[index_];
 }
 
 INDEX_TEMPLATE_ARGUMENTS
 auto INDEXITERATOR_TYPE::operator++() -> INDEXITERATOR_TYPE & {
-  // if ((index_ = page_->GetSize() - 1) && page_->GetNextPageId() != INVALID_PAGE_ID) {
-  //   auto guard = bpm_->FetchPageBasic(page_->GetNextPageId());
-  //   page = guard.AsMut<B_PLUS_TREE_LEAF_PAGE_TYPE>();
-  //   index_ = 0;
-  //   return *this;
-  // }
+  // ReadPageGuard guard = bpm_->FetchPageRead(page_id_);
+  auto page = guard_.As<B_PLUS_TREE_LEAF_PAGE_TYPE>();
+  if (index_ == page->GetSize() - 1 && page->GetNextPageId() != INVALID_PAGE_ID) {
+    guard_ = bpm_->FetchPageBasic(page->GetNextPageId());
+    page_id_ = guard_.PageId();
+    index_ = 0;
+    return *this;
+  }
   index_++;
   return *this;
 }

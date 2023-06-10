@@ -59,9 +59,11 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   void SetNextPageId(page_id_t next_page_id);
   auto KeyAt(int index) const -> KeyType;
   auto ValueAt(int index) const -> ValueType;
+  auto Find(const KeyType &key, KeyComparator &comp) const -> std::pair<bool, int>;
   auto Insert(const KeyType &key, const ValueType &value, KeyComparator &comp) -> bool;
-  void Reallocate(const std::vector<MappingType> &array, int begin, int end);
-  void AccquireArray(std::vector<MappingType> &array) const;
+  void SetArray(const std::vector<MappingType> &array, int begin, int end);
+  void GetArray(std::vector<MappingType> &array) const;
+  void DeleteEntry(const KeyType &key, KeyComparator &comp);
   /**
    * @brief for test only return a string representing all keys in
    * this leaf page formatted as "(key1,key2,key3,...)"
