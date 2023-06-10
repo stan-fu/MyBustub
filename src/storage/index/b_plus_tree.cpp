@@ -130,9 +130,9 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
   auto new_leaf = new_guard.AsMut<LeafPage>();
   new_leaf->Init(leaf_max_size_);
 
-  int old_size = (old_leaf->GetMaxSize() + 1) / 2;
-  old_leaf->SetArray(array, 0, old_size);
-  new_leaf->SetArray(array, old_size, static_cast<int>(array.size()));
+  int half_size = (old_leaf->GetMaxSize() + 1) / 2;
+  old_leaf->SetArray(array, 0, half_size);
+  new_leaf->SetArray(array, half_size, static_cast<int>(array.size()));
 
   page_id_t next_pid = old_leaf->GetNextPageId();
   old_leaf->SetNextPageId(new_pid);
@@ -144,9 +144,7 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
 
 INDEX_TEMPLATE_ARGUMENTS
 void BPLUSTREE_TYPE::InsertInParent(Context &ctx, const KeyType &key, page_id_t right_child_pid) {
-  auto left_child_guard = std::make_unique<WritePageGuard>(std::move(ctx.write_set_.back()));
-  auto left_child_pid = left_child_guard->PageId();
-  ctx.write_set_.pop_back();
+  auto left_child_pid = ctx.write_set_.back().PageId();
   if (ctx.IsRootPage(left_child_pid)) {
     // create new root
     page_id_t new_root_pid;
@@ -160,7 +158,7 @@ void BPLUSTREE_TYPE::InsertInParent(Context &ctx, const KeyType &key, page_id_t 
     return;
   }
 
-  left_child_guard.reset();
+  ctx.write_set_.pop_back();
   auto *parent_page = ctx.write_set_.back().AsMut<InternalPage>();
   if (!parent_page->IsFull()) {
     parent_page->Insert(key, right_child_pid, comparator_);
@@ -179,6 +177,7 @@ void BPLUSTREE_TYPE::InsertInParent(Context &ctx, const KeyType &key, page_id_t 
     int min_size = parent_page->GetMinSize();
     parent_page->SetArray(array, 0, min_size);
     uncle_page->SetArray(array, min_size, array.size());
+
     auto key_to_uncle = array[min_size].first;
     uncle_guard.reset();
     InsertInParent(ctx, key_to_uncle, uncle_pid);
@@ -302,10 +301,9 @@ void BPLUSTREE_TYPE::DeleteEntry(Context &ctx, const KeyType &key) {
     } else {
       // redistribution: borrow an entry from sibling
       // optimize: the ancestor node can be unlocked ahead of time
-      while (ctx.write_set_.size() > 1) {
-        ctx.write_set_.pop_front();
-        ctx.header_page_ = std::nullopt;
-      }
+      ctx.header_page_ = std::nullopt;
+      ctx.write_set_.clear();
+
       if (left_page->IsLeafPage()) {
         auto left_node = reinterpret_cast<LeafPage *>(left_page);
         auto right_node = reinterpret_cast<LeafPage *>(right_page);
@@ -346,7 +344,6 @@ void BPLUSTREE_TYPE::DeleteEntry(Context &ctx, const KeyType &key) {
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Begin() -> INDEXITERATOR_TYPE {
-  fmt::print("Begin()\n");
   ReadPageGuard guard = bpm_->FetchPageRead(header_page_id_);
   page_id_t root_id = GetRootPageId();
   guard = bpm_->FetchPageRead(root_id);
@@ -366,7 +363,6 @@ auto BPLUSTREE_TYPE::Begin() -> INDEXITERATOR_TYPE {
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Begin(const KeyType &key) -> INDEXITERATOR_TYPE {
-  fmt::print("Begin( {} )\n", key.ToString());
   ReadPageGuard guard = bpm_->FetchPageRead(header_page_id_);
   page_id_t root_id = GetRootPageId();
   guard = bpm_->FetchPageRead(root_id);
