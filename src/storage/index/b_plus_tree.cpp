@@ -20,7 +20,6 @@ BPLUSTREE_TYPE::BPlusTree(std::string name, page_id_t header_page_id, BufferPool
   WritePageGuard guard = bpm_->FetchPageWrite(header_page_id_);
   auto root_page = guard.AsMut<BPlusTreeHeaderPage>();
   root_page->root_page_id_ = INVALID_PAGE_ID;
-  fmt::print("BPlusTree -- leaf_max = {}, internal_max = {}\n", leaf_max_size, internal_max_size);
 }
 
 /*
@@ -28,7 +27,7 @@ BPLUSTREE_TYPE::BPlusTree(std::string name, page_id_t header_page_id, BufferPool
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::IsEmpty() const -> bool {
-  auto header_guard = bpm_->FetchPageRead(header_page_id_);
+  auto header_guard = bpm_->FetchPageBasic(header_page_id_);
   auto header_page = header_guard.As<BPlusTreeHeaderPage>();
   return header_page->root_page_id_ == INVALID_PAGE_ID;
 }
@@ -42,7 +41,6 @@ auto BPLUSTREE_TYPE::IsEmpty() const -> bool {
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result, Transaction *txn) -> bool {
-  fmt::print("GetValue( {} ) \n", key.ToString());
   ReadPageGuard guard = bpm_->FetchPageRead(header_page_id_);
   page_id_t root_id = GetRootPageId();
   guard = bpm_->FetchPageRead(root_id);
@@ -73,7 +71,6 @@ auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transaction *txn) -> bool {
-  fmt::print("Insert( {} )\n", key.ToString());
   Context ctx;
   page_id_t pid;
   BPlusTreePage *page;
@@ -84,9 +81,8 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
   pid = header_page->root_page_id_;
   // create new tree if root is empty
   if (pid == INVALID_PAGE_ID) {
-    bpm_->NewPageGuarded(&pid);
-    guard = bpm_->FetchPageWrite(pid);
-    auto root_page = guard.AsMut<LeafPage>();
+    auto root_guard = bpm_->NewPageGuarded(&pid);
+    auto root_page = root_guard.AsMut<LeafPage>();
     root_page->Init(leaf_max_size_);
     root_page->Insert(key, value, comparator_);
     header_page->root_page_id_ = pid;
@@ -100,7 +96,6 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
   ctx.write_set_.push_back(std::move(guard));
 
   while (!page->IsLeafPage()) {
-    WritePageGuard guard;
     auto internal_page = reinterpret_cast<InternalPage *>(page);
     guard = bpm_->FetchPageWrite(internal_page->Find(key, comparator_));
     page = guard.AsMut<BPlusTreePage>();
@@ -112,9 +107,7 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
     ctx.write_set_.push_back(std::move(guard));
   }
 
-  LeafPage *old_leaf;
-  old_leaf = reinterpret_cast<LeafPage *>(page);
-
+  auto *old_leaf = reinterpret_cast<LeafPage *>(page);
   if (!page->IsFull()) {
     return old_leaf->Insert(key, value, comparator_);
   }
@@ -132,11 +125,9 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
     return false;
   }
 
-  LeafPage *new_leaf;
   page_id_t new_pid;
-  bpm_->NewPageGuarded(&new_pid);
-  guard = bpm_->FetchPageWrite(new_pid);
-  new_leaf = guard.AsMut<LeafPage>();
+  auto new_guard = bpm_->NewPageGuarded(&new_pid);
+  auto new_leaf = new_guard.AsMut<LeafPage>();
   new_leaf->Init(leaf_max_size_);
 
   int old_size = (old_leaf->GetMaxSize() + 1) / 2;
@@ -164,7 +155,6 @@ void BPLUSTREE_TYPE::InsertInParent(Context &ctx, const KeyType &key, page_id_t 
     new_root->Init();  // TEST -- init as max size that page memory allowed
     new_root->Insert(key, left_child_pid, comparator_);
     new_root->Insert(key, right_child_pid, comparator_);
-    BUSTUB_ASSERT(ctx.header_page_ != std::nullopt, "root latch release error");
     auto header_page = ctx.header_page_->AsMut<BPlusTreeHeaderPage>();
     header_page->root_page_id_ = new_root_pid;
     return;
@@ -207,7 +197,6 @@ void BPLUSTREE_TYPE::InsertInParent(Context &ctx, const KeyType &key, page_id_t 
  */
 INDEX_TEMPLATE_ARGUMENTS
 void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *txn) {
-  fmt::print("Remove ( {} )\n", key.ToString());
   Context ctx;
   page_id_t pid;
   WritePageGuard guard;
