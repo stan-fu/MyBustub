@@ -144,6 +144,7 @@ class BPlusTree {
   int leaf_max_size_;
   int internal_max_size_;
   page_id_t header_page_id_;
+  std::mutex mut_;
 };
 
 /**

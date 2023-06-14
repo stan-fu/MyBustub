@@ -61,7 +61,7 @@ bool BPlusTreeLockBenchmarkCall(size_t num_threads, int leaf_node_size, bool wit
       }
       delete transaction;
     };
-    auto t = std::thread(std::move(func));
+    auto t = std::thread(std::move(func));  // 带全局锁的多线程和
     threads.emplace_back(std::move(t));
   }
 
@@ -99,7 +99,7 @@ TEST(BPlusTreeContentionTest, BPlusTreeContentionBenchmark) {  // NOLINT
   }
 
   std::cout << "<<< BEGIN" << std::endl;
-  std::cout << "Normal Access Time: ";
+  std::cout << "Normal Access Time (mutil threads): ";
   double ratio_1 = 0;
   double ratio_2 = 0;
   for (auto x : time_ms_wo_mutex) {
@@ -108,7 +108,7 @@ TEST(BPlusTreeContentionTest, BPlusTreeContentionBenchmark) {  // NOLINT
   }
   std::cout << std::endl;
 
-  std::cout << "Serialized Access Time: ";
+  std::cout << "Serialized Access Time (single thread): ";
   for (auto x : time_ms_with_mutex) {
     std::cout << x << " ";
     ratio_2 += x;
@@ -145,7 +145,7 @@ TEST(BPlusTreeContentionTest, BPlusTreeContentionBenchmark2) {  // NOLINT
   }
 
   std::cout << "<<< BEGIN2" << std::endl;
-  std::cout << "Normal Access Time: ";
+  std::cout << "Normal Access Time (mutil threads): ";
   double ratio_1 = 0;
   double ratio_2 = 0;
   for (auto x : time_ms_wo_mutex) {
@@ -154,13 +154,85 @@ TEST(BPlusTreeContentionTest, BPlusTreeContentionBenchmark2) {  // NOLINT
   }
   std::cout << std::endl;
 
-  std::cout << "Serialized Access Time: ";
+  std::cout << "Serialized Access Time (single thread): ";
   for (auto x : time_ms_with_mutex) {
     std::cout << x << " ";
     ratio_2 += x;
   }
   std::cout << std::endl;
   std::cout << "Ratio: " << ratio_1 / ratio_2 << std::endl;
+  std::cout << ">>> END2" << std::endl;
+  std::cout << "If your above data is an outlier in all submissions (based on statistics and probably some "
+               "machine-learning), TAs will manually inspect your code to ensure you are implementing lock crabbing "
+               "correctly."
+            << std::endl;
+}
+
+bool BPlusTreeLockBenchmarkCall2(size_t num_threads, int leaf_node_size, bool with_global_mutex) {  // NOLINT
+  bool success = true;
+  std::vector<int64_t> insert_keys;
+
+  // create KeyComparator and index schema
+  auto key_schema = ParseCreateStatement("a bigint");
+  GenericComparator<8> comparator(key_schema.get());
+  auto *disk_manager = new DiskManagerMemory(256 << 10);  // 1GB
+  auto *bpm = new BufferPoolManager(64, disk_manager);
+
+  // create and fetch header_page
+  page_id_t page_id;
+  auto *header_page = bpm->NewPage(&page_id);
+  (void)header_page;
+
+  // create b+ tree
+  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", page_id, bpm, comparator, leaf_node_size, 10);
+
+  std::vector<std::thread> threads;
+
+  const int keys_per_thread = 20000 / num_threads;
+  const int keys_stride = 100000;
+
+  for (size_t i = 0; i < num_threads; i++) {
+    GenericKey<8> index_key;
+    RID rid;
+    const auto end_key = keys_stride * i + keys_per_thread;
+    for (auto key = i * keys_stride; key < end_key; key++) {
+      int64_t value = key & 0xFFFFFFFF;
+      rid.Set(static_cast<int32_t>(key >> 32), value);
+      index_key.SetFromInteger(key);
+      tree.Insert(index_key, rid);
+    }
+  }
+
+  bpm->UnpinPage(HEADER_PAGE_ID, true);
+  delete disk_manager;
+  delete bpm;
+
+  return success;
+}
+
+TEST(BPlusTreeContentionTest, BPlusTreeContentionBenchmark3) {  // NOLINT
+  std::cout << "This test will see how your B+ tree performance differs with and without contention." << std::endl;
+  std::cout << "If your submission timeout, segfault, or didn't implement lock crabbing, we will manually deduct all "
+               "concurrent test points (maximum 25)."
+            << std::endl;
+  std::cout << "left_node_size = 10" << std::endl;
+
+  std::vector<size_t> single_thread;
+  for (size_t iter = 0; iter < 10; iter++) {
+    auto clock_start = std::chrono::system_clock::now();
+    ASSERT_TRUE(BPlusTreeLockBenchmarkCall2(32, 10, true));
+    auto clock_end = std::chrono::system_clock::now();
+    auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(clock_end - clock_start);
+    single_thread.push_back(dur.count());
+  }
+
+  std::cout << "<<< BEGIN2" << std::endl;
+  std::cout << "single thread: ";
+  for (auto x : single_thread) {
+    std::cout << x << " ";
+  }
+  std::cout << std::endl;
+
   std::cout << ">>> END2" << std::endl;
   std::cout << "If your above data is an outlier in all submissions (based on statistics and probably some "
                "machine-learning), TAs will manually inspect your code to ensure you are implementing lock crabbing "
