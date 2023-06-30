@@ -13,6 +13,7 @@
 #pragma once
 
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "execution/executor_context.h"
@@ -49,8 +50,41 @@ class SortExecutor : public AbstractExecutor {
   /** @return The output schema for the sort */
   auto GetOutputSchema() const -> const Schema & override { return plan_->OutputSchema(); }
 
+  struct Cmp {
+    explicit Cmp(std::vector<std::pair<OrderByType, AbstractExpressionRef>> order_by,
+                 std::unique_ptr<AbstractExecutor> &child_executor)
+        : order_by_(std::move(order_by)), schema_(child_executor->GetOutputSchema()) {}
+
+    auto operator()(Tuple &a, Tuple &b) -> bool {
+      for (auto [ob_type, expr] : order_by_) {
+        auto value_a = expr->Evaluate(&a, schema_);
+        auto value_b = expr->Evaluate(&b, schema_);
+        if (value_a.CompareEquals(value_b) == CmpBool::CmpTrue) {
+          continue;
+        }
+        switch (ob_type) {
+          case OrderByType::ASC:
+          case OrderByType::DEFAULT:
+            return value_a.CompareLessThan(value_b) == CmpBool::CmpTrue;
+          case OrderByType::DESC:
+            return value_b.CompareLessThan(value_a) == CmpBool::CmpTrue;
+          default:
+            BUSTUB_ENSURE(false, "invalid order by");
+        }
+      }
+      return true;
+    }
+
+    std::vector<std::pair<OrderByType, AbstractExpressionRef>> order_by_;
+    Schema schema_;
+  };
+
  private:
   /** The sort plan node to be executed */
   const SortPlanNode *plan_;
+  std::unique_ptr<AbstractExecutor> child_executor_;
+  std::vector<Tuple> results_;
+  std::vector<Tuple>::const_iterator iter_;
+  Cmp cmp_;
 };
 }  // namespace bustub

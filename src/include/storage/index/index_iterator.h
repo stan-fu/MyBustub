@@ -24,9 +24,7 @@ class IndexIterator {
  public:
   // you may define your own constructor based on your member variables
   explicit IndexIterator(BufferPoolManager *bpm, page_id_t page_id, int index)
-      : bpm_(bpm), page_id_(page_id), index_(index) {
-    guard_ = bpm_->FetchPageBasic(page_id_);
-  }
+      : bpm_(bpm), page_id_(page_id), index_(index) {}
   IndexIterator(const IndexIterator &iter) = default;
   ~IndexIterator();  // NOLINT
 
@@ -45,7 +43,6 @@ class IndexIterator {
   BufferPoolManager *bpm_;
   page_id_t page_id_;
   int index_;
-  BasicPageGuard guard_;
 };
 
 }  // namespace bustub

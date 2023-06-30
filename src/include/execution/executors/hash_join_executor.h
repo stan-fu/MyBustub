@@ -13,12 +13,52 @@
 #pragma once
 
 #include <memory>
+#include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include "execution/executor_context.h"
 #include "execution/executors/abstract_executor.h"
 #include "execution/plans/hash_join_plan.h"
+#include "include/common/util/hash_util.h"
 #include "storage/table/tuple.h"
+namespace bustub {
+struct JoinKey {
+  /** The group-by values */
+  std::vector<Value> keys_;
+
+  /**
+   * Compares two join keys for equality.
+   * @param other the other join key to be compared with
+   * @return `true` if both join keys have equivalent join expressions, `false` otherwise
+   */
+  auto operator==(const JoinKey &other) const -> bool {
+    for (uint32_t i = 0; i < other.keys_.size(); i++) {
+      if (keys_[i].CompareEquals(other.keys_[i]) != CmpBool::CmpTrue) {
+        return false;
+      }
+    }
+    return true;
+  }
+};
+}  // namespace bustub
+namespace std {
+
+/** Implements std::hash on JoinKey */
+template <>
+struct hash<bustub::JoinKey> {
+  auto operator()(const bustub::JoinKey &join_key) const -> std::size_t {
+    size_t curr_hash = 0;
+    for (const auto &key : join_key.keys_) {
+      if (!key.IsNull()) {
+        curr_hash = bustub::HashUtil::CombineHashes(curr_hash, bustub::HashUtil::HashValue(&key));
+      }
+    }
+    return curr_hash;
+  }
+};
+
+}  // namespace std
 
 namespace bustub {
 
@@ -52,8 +92,28 @@ class HashJoinExecutor : public AbstractExecutor {
   auto GetOutputSchema() const -> const Schema & override { return plan_->OutputSchema(); };
 
  private:
+  auto MakeLeftJoinKey(const Tuple *tuple) -> JoinKey {
+    std::vector<Value> keys;
+    for (const auto &expr : plan_->LeftJoinKeyExpressions()) {
+      keys.emplace_back(expr->Evaluate(tuple, left_child_->GetOutputSchema()));
+    }
+    return {keys};
+  }
+  auto MakeRightJoinKey(const Tuple *tuple) -> JoinKey {
+    std::vector<Value> keys;
+    for (const auto &expr : plan_->RightJoinKeyExpressions()) {
+      keys.emplace_back(expr->Evaluate(tuple, right_child_->GetOutputSchema()));
+    }
+    return {keys};
+  }
+
   /** The NestedLoopJoin plan node to be executed. */
   const HashJoinPlanNode *plan_;
+  std::unique_ptr<AbstractExecutor> left_child_;
+  std::unique_ptr<AbstractExecutor> right_child_;
+  std::unordered_multimap<JoinKey, Tuple> hash_join_table_;
+  std::vector<Tuple> join_results_;
+  std::vector<Tuple>::const_iterator iter_;
 };
 
 }  // namespace bustub

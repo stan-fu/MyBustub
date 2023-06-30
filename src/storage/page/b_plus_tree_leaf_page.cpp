@@ -62,8 +62,14 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::ValueAt(int index) const -> ValueType {
 
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::Find(const KeyType &key, KeyComparator &comp) const -> std::pair<bool, int> {
-  auto it = std::find_if(array_, array_ + GetSize(), [&](const MappingType &kv) { return comp(key, kv.first) == 0; });
-  if (it == array_ + GetSize()) {
+  // auto it = std::find_if(array_, array_ + GetSize(), [&](const MappingType &kv) { return comp(key, kv.first) == 0;
+  // }); if (it == array_ + GetSize()) {
+  //   return {false, 0};
+  // }
+  // return {true, it - array_};
+  auto it = std::lower_bound(array_, array_ + GetSize(), key,
+                             [&](const MappingType &kv, const KeyType &k) { return comp(k, kv.first) > 0; });
+  if (it == array_ + GetSize() || comp(key, it->first) != 0) {
     return {false, 0};
   }
   return {true, it - array_};

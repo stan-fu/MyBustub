@@ -41,7 +41,6 @@ auto BPLUSTREE_TYPE::IsEmpty() const -> bool {
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result, Transaction *txn) -> bool {
-  // std::lock_guard<std::mutex> lock(mut_);
   ReadPageGuard guard = bpm_->FetchPageRead(header_page_id_);
   guard = bpm_->FetchPageRead(guard.As<BPlusTreeHeaderPage>()->root_page_id_);
   auto page = guard.As<BPlusTreePage>();
@@ -71,9 +70,7 @@ auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transaction *txn) -> bool {
-  // std::lock_guard<std::mutex> lock(mut_);
   Context ctx;
-
   ctx.header_page_ = bpm_->FetchPageWrite(header_page_id_);
   auto header_page = ctx.header_page_->AsMut<BPlusTreeHeaderPage>();
   // create new tree if root is empty
@@ -146,7 +143,7 @@ void BPLUSTREE_TYPE::InsertInParent(Context &ctx, const KeyType &key, page_id_t 
     auto header_page = ctx.header_page_->AsMut<BPlusTreeHeaderPage>();
     auto new_root_guard = bpm_->NewPageGuarded(&header_page->root_page_id_);
     auto *new_root = new_root_guard.AsMut<InternalPage>();
-    new_root->Init(internal_max_size_);  // TEST -- init as max size that page memory allowed
+    new_root->Init();  // TEST -- init as max size that page memory allowed
     new_root->Insert(key, left_child_pid, comparator_);
     new_root->Insert(key, right_child_pid, comparator_);
     return;
@@ -160,7 +157,7 @@ void BPLUSTREE_TYPE::InsertInParent(Context &ctx, const KeyType &key, page_id_t 
     page_id_t uncle_pid;
     auto uncle_guard = std::make_unique<BasicPageGuard>(bpm_->NewPageGuarded(&uncle_pid));
     auto *uncle_page = uncle_guard->AsMut<InternalPage>();
-    uncle_page->Init(internal_max_size_);  // TEST
+    uncle_page->Init();  // TEST
     std::vector<std::pair<KeyType, page_id_t>> array;
     parent_page->GetArray(array);
     auto it = std::upper_bound(
@@ -190,13 +187,15 @@ void BPLUSTREE_TYPE::InsertInParent(Context &ctx, const KeyType &key, page_id_t 
  */
 INDEX_TEMPLATE_ARGUMENTS
 void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *txn) {
-  // std::lock_guard<std::mutex> lock(mut_);
   Context ctx;
-
   // lock header page
-  WritePageGuard header_guard = bpm_->FetchPageWrite(header_page_id_);
-  ctx.root_page_id_ = header_guard.AsMut<BPlusTreeHeaderPage>()->root_page_id_;
-  ctx.header_page_ = std::move(header_guard);
+  ctx.header_page_ = bpm_->FetchPageWrite(header_page_id_);
+  ctx.root_page_id_ = ctx.header_page_->AsMut<BPlusTreeHeaderPage>()->root_page_id_;
+
+  // If current tree is empty, return immediately
+  if (ctx.root_page_id_ == INVALID_PAGE_ID) {
+    return;
+  }
 
   // accquire root page
   auto guard = bpm_->FetchPageWrite(ctx.root_page_id_);
@@ -231,6 +230,10 @@ void BPLUSTREE_TYPE::DeleteEntry(Context &ctx, const KeyType &key) {
 
   if (ctx.IsRootPage(guard->PageId())) {
     if (page->IsLeafPage()) {
+      if (page->GetSize() == 0) {
+        auto header_page = ctx.header_page_->AsMut<BPlusTreeHeaderPage>();
+        header_page->root_page_id_ = INVALID_PAGE_ID;
+      }
       return;
     }
     if (page->GetSize() == 1) {
@@ -338,6 +341,9 @@ INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Begin() -> INDEXITERATOR_TYPE {
   ReadPageGuard guard = bpm_->FetchPageRead(header_page_id_);
   page_id_t root_id = GetRootPageId();
+  if (root_id == INVALID_PAGE_ID) {
+    return INDEXITERATOR_TYPE(bpm_, INVALID_PAGE_ID, 0);
+  }
   guard = bpm_->FetchPageRead(root_id);
   auto page = guard.As<BPlusTreePage>();
   while (!page->IsLeafPage()) {
@@ -357,9 +363,11 @@ INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Begin(const KeyType &key) -> INDEXITERATOR_TYPE {
   ReadPageGuard guard = bpm_->FetchPageRead(header_page_id_);
   page_id_t root_id = GetRootPageId();
+  if (root_id == INVALID_PAGE_ID) {
+    return INDEXITERATOR_TYPE(bpm_, INVALID_PAGE_ID, 0);
+  }
   guard = bpm_->FetchPageRead(root_id);
   auto page = guard.As<BPlusTreePage>();
-
   while (!page->IsLeafPage()) {
     auto internal_page = reinterpret_cast<const InternalPage *>(page);
     guard = bpm_->FetchPageRead(internal_page->Find(key, comparator_));
@@ -376,17 +384,17 @@ auto BPLUSTREE_TYPE::Begin(const KeyType &key) -> INDEXITERATOR_TYPE {
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::End() -> INDEXITERATOR_TYPE {
-  ReadPageGuard guard = bpm_->FetchPageRead(header_page_id_);
-  page_id_t root_id = GetRootPageId();
-  guard = bpm_->FetchPageRead(root_id);
-  auto page = guard.As<BPlusTreePage>();
+  // ReadPageGuard guard = bpm_->FetchPageRead(header_page_id_);
+  // page_id_t root_id = GetRootPageId();
+  // guard = bpm_->FetchPageRead(root_id);
+  // auto page = guard.As<BPlusTreePage>();
 
-  while (!page->IsLeafPage()) {
-    auto *internal_page = reinterpret_cast<const InternalPage *>(page);
-    guard = bpm_->FetchPageRead(internal_page->ValueAt(page->GetSize() - 1));
-    page = guard.As<BPlusTreePage>();
-  }
-  return INDEXITERATOR_TYPE(bpm_, guard.PageId(), page->GetSize());
+  // while (!page->IsLeafPage()) {
+  //   auto *internal_page = reinterpret_cast<const InternalPage *>(page);
+  //   guard = bpm_->FetchPageRead(internal_page->ValueAt(page->GetSize() - 1));
+  //   page = guard.As<BPlusTreePage>();
+  // }
+  return INDEXITERATOR_TYPE(bpm_, INVALID_PAGE_ID, 0);
 }
 
 /**

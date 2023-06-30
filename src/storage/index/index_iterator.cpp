@@ -16,26 +16,24 @@ INDEX_TEMPLATE_ARGUMENTS
 INDEXITERATOR_TYPE::~IndexIterator() = default;  // NOLINT
 
 INDEX_TEMPLATE_ARGUMENTS
-auto INDEXITERATOR_TYPE::IsEnd() -> bool {
-  // ReadPageGuard guard = bpm_->FetchPageRead(page_id_);
-  auto page = guard_.As<B_PLUS_TREE_LEAF_PAGE_TYPE>();
-  return page->GetNextPageId() == INVALID_PAGE_ID && index_ == page->GetSize();
-}
+auto INDEXITERATOR_TYPE::IsEnd() -> bool { return page_id_ == INVALID_PAGE_ID; }
 
 INDEX_TEMPLATE_ARGUMENTS
 auto INDEXITERATOR_TYPE::operator*() -> const MappingType & {
-  // ReadPageGuard guard = bpm_->FetchPageRead(page_id_);
-  auto page = guard_.As<B_PLUS_TREE_LEAF_PAGE_TYPE>();
+  auto guard = bpm_->FetchPageRead(page_id_);
+  auto page = guard.As<B_PLUS_TREE_LEAF_PAGE_TYPE>();
   return page->array_[index_];
 }
 
 INDEX_TEMPLATE_ARGUMENTS
 auto INDEXITERATOR_TYPE::operator++() -> INDEXITERATOR_TYPE & {
-  // ReadPageGuard guard = bpm_->FetchPageRead(page_id_);
-  auto page = guard_.As<B_PLUS_TREE_LEAF_PAGE_TYPE>();
-  if (index_ == page->GetSize() - 1 && page->GetNextPageId() != INVALID_PAGE_ID) {
-    guard_ = bpm_->FetchPageBasic(page->GetNextPageId());
-    page_id_ = guard_.PageId();
+  if (page_id_ == INVALID_PAGE_ID) {
+    return *this;
+  }
+  auto guard = bpm_->FetchPageRead(page_id_);
+  auto page = guard.As<B_PLUS_TREE_LEAF_PAGE_TYPE>();
+  if (index_ == page->GetSize() - 1) {
+    page_id_ = page->GetNextPageId();
     index_ = 0;
     return *this;
   }

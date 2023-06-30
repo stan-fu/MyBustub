@@ -13,9 +13,9 @@
 #pragma once
 
 #include <memory>
+#include <queue>
 #include <utility>
 #include <vector>
-
 #include "execution/executor_context.h"
 #include "execution/executors/abstract_executor.h"
 #include "execution/plans/seq_scan_plan.h"
@@ -59,9 +59,56 @@ class TopNExecutor : public AbstractExecutor {
   auto GetNumInHeap() -> size_t;
 
  private:
+  struct Cmp {
+    explicit Cmp(std::vector<std::pair<OrderByType, AbstractExpressionRef>> order_by,
+                 std::unique_ptr<AbstractExecutor> &child_executor)
+        : order_by_(std::move(order_by)) {
+      if (child_executor != nullptr) {
+        schema_ = std::make_shared<Schema>(child_executor->GetOutputSchema());
+      }
+    }
+    auto operator()(const Tuple &a, const Tuple &b) -> bool {
+      for (auto [ob_type, expr] : order_by_) {
+        auto value_a = expr->Evaluate(&a, *schema_);
+        auto value_b = expr->Evaluate(&b, *schema_);
+        if (value_a.CompareEquals(value_b) == CmpBool::CmpTrue) {
+          continue;
+        }
+        switch (ob_type) {
+          case OrderByType::ASC:
+          case OrderByType::DEFAULT:
+            return value_a.CompareLessThan(value_b) == CmpBool::CmpTrue;
+          case OrderByType::DESC:
+            return value_b.CompareLessThan(value_a) == CmpBool::CmpTrue;
+          default:
+            BUSTUB_ENSURE(false, "invalid order by");
+        }
+      }
+      return true;
+    }
+
+    void swap(Cmp &that) {  // NOLINT
+      order_by_.swap(that.order_by_);
+      schema_.swap(that.schema_);
+    }
+
+    void SetSchema(const Schema &schema) {
+      if (schema_ == nullptr) {
+        schema_ = std::make_shared<Schema>(schema);
+      }
+    }
+
+    std::vector<std::pair<OrderByType, AbstractExpressionRef>> order_by_;
+    std::shared_ptr<Schema> schema_;
+  };
+
   /** The topn plan node to be executed */
   const TopNPlanNode *plan_;
   /** The child executor from which tuples are obtained */
   std::unique_ptr<AbstractExecutor> child_executor_;
+  /** Accquire top n tuples through heap sort */
+  size_t index_;
+  Cmp cmp_;
+  std::vector<Tuple> container_;
 };
 }  // namespace bustub

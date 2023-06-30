@@ -129,7 +129,7 @@ auto main(int argc, char **argv) -> int {
   }
 
   // 执行时间
-  uint64_t duration_ms = 100000;
+  uint64_t duration_ms = 30000;
   if (program.present("--duration")) {
     duration_ms = std::stoi(program.get("--duration"));
   }

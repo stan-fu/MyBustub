@@ -342,7 +342,7 @@ class Catalog {
   }
 
  private:
-  [[maybe_unused]] BufferPoolManager *bpm_;
+  BufferPoolManager *bpm_;
   [[maybe_unused]] LockManager *lock_manager_;
   [[maybe_unused]] LogManager *log_manager_;
 
