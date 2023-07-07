@@ -62,10 +62,14 @@ class LockManager {
     bool granted_{false};
   };
 
+  /**
+   * @brief keep track of which transactions are waiting on a lock
+   *
+   */
   class LockRequestQueue {
    public:
     /** List of lock requests for the same resource (table or row) */
-    std::list<LockRequest *> request_queue_;
+    std::list<std::shared_ptr<LockRequest>> request_queue_;
     /** For notifying blocked transactions on this rid */
     std::condition_variable cv_;
     /** txn_id of an upgrading transaction (if any) */
@@ -312,16 +316,35 @@ class LockManager {
  private:
   /** Spring 2023 */
   /* You are allowed to modify all functions below. */
-  auto UpgradeLockTable(Transaction *txn, LockMode lock_mode, const table_oid_t &oid) -> bool;
-  auto UpgradeLockRow(Transaction *txn, LockMode lock_mode, const table_oid_t &oid, const RID &rid) -> bool;
+  auto GetTableLockMode(Transaction *txn, const table_oid_t &oid) -> std::optional<LockMode>;
+  auto GetRowLockMode(Transaction *txn, const table_oid_t &oid, const RID &rid) -> std::optional<LockMode>;
   auto AreLocksCompatible(LockMode l1, LockMode l2) -> bool;
-  auto CanTxnTakeLock(Transaction *txn, LockMode lock_mode) -> bool;
-  void GrantNewLocksIfPossible(LockRequestQueue *lock_request_queue);
+  void CanTxnTakeLock(Transaction *txn, LockMode lock_mode);
+  void GrantNewLocksIfPossible(const std::shared_ptr<LockRequestQueue> &lock_request_queue);
   auto CanLockUpgrade(LockMode curr_lock_mode, LockMode requested_lock_mode) -> bool;
-  auto CheckAppropriateLockOnTable(Transaction *txn, const table_oid_t &oid, LockMode row_lock_mode) -> bool;
+  void CheckAppropriateLockOnTable(Transaction *txn, const table_oid_t &oid, LockMode row_lock_mode);
   auto FindCycle(txn_id_t source_txn, std::vector<txn_id_t> &path, std::unordered_set<txn_id_t> &on_path,
                  std::unordered_set<txn_id_t> &visited, txn_id_t *abort_txn_id) -> bool;
   void UnlockAll();
+  auto GetTableLockSet(Transaction *txn, LockMode lock_mode) -> std::shared_ptr<std::unordered_set<table_oid_t>> {
+    switch (lock_mode) {
+      case LockManager::LockMode::SHARED:
+        return txn->GetSharedTableLockSet();
+      case LockManager::LockMode::EXCLUSIVE:
+        return txn->GetExclusiveTableLockSet();
+      case LockManager::LockMode::INTENTION_SHARED:
+        return txn->GetIntentionSharedTableLockSet();
+      case LockManager::LockMode::INTENTION_EXCLUSIVE:
+        return txn->GetIntentionExclusiveTableLockSet();
+      case LockManager::LockMode::SHARED_INTENTION_EXCLUSIVE:
+        return txn->GetSharedIntentionExclusiveTableLockSet();
+    }
+  }
+
+  auto GetRowLockSet(Transaction *txn, LockManager::LockMode lock_mode)
+      -> std::shared_ptr<std::unordered_map<table_oid_t, std::unordered_set<RID>>> {
+    return lock_mode == LockManager::LockMode::EXCLUSIVE ? txn->GetExclusiveRowLockSet() : txn->GetSharedRowLockSet();
+  }
 
   /** Structure that holds lock requests for a given table oid */
   std::unordered_map<table_oid_t, std::shared_ptr<LockRequestQueue>> table_lock_map_;
@@ -363,6 +386,31 @@ struct fmt::formatter<bustub::LockManager::LockMode> : formatter<std::string_vie
         break;
       case bustub::LockManager::LockMode::SHARED_INTENTION_EXCLUSIVE:
         name = "SHARED_INTENTION_EXCLUSIVE";
+        break;
+    }
+    return formatter<string_view>::format(name, ctx);
+  }
+};
+
+template <>
+struct fmt::formatter<bustub::TransactionState> : formatter<std::string_view> {
+  // parse is inherited from formatter<string_view>.
+  template <typename FormatContext>
+  auto format(bustub::TransactionState x, FormatContext &ctx) const {
+    using bustub::TransactionState;
+    string_view name = "unknown";
+    switch (x) {
+      case TransactionState::ABORTED:
+        name = "ABORTED";
+        break;
+      case TransactionState::COMMITTED:
+        name = "COMMITTED";
+        break;
+      case TransactionState::GROWING:
+        name = "GROWING";
+        break;
+      case TransactionState::SHRINKING:
+        name = "SHRINKING";
         break;
     }
     return formatter<string_view>::format(name, ctx);

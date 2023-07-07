@@ -24,6 +24,8 @@ void DeleteExecutor::Init() {
   child_executor_->Init();
   table_info_ = exec_ctx_->GetCatalog()->GetTable(plan_->TableOid());
   finished_ = false;
+  txn_ = exec_ctx_->GetTransaction();
+  lock_mgr_ = exec_ctx_->GetLockManager();
 }
 
 auto DeleteExecutor::Next(Tuple *tuple, RID *rid) -> bool {
@@ -39,10 +41,15 @@ auto DeleteExecutor::Next(Tuple *tuple, RID *rid) -> bool {
 
   // delete tuple
   while (child_executor_->Next(&delete_tuple, &child_rid)) {
+    // mark tuple as delete
     auto meta = table_info_->table_->GetTupleMeta(child_rid);
     meta.is_deleted_ = true;
     table_info_->table_->UpdateTupleMeta(meta, child_rid);
     ++delete_cnt;
+    // insert table write record into transaction
+    TableWriteRecord table_write_record = {plan_->TableOid(), child_rid, table_info_->table_.get()};
+    table_write_record.wtype_ = WType::DELETE;
+    txn_->AppendTableWriteRecord(table_write_record);
     // delete index
     auto indexes = exec_ctx_->GetCatalog()->GetTableIndexes(table_info_->name_);
     for (auto index_info : indexes) {
@@ -51,6 +58,10 @@ auto DeleteExecutor::Next(Tuple *tuple, RID *rid) -> bool {
       auto key_attrs = index_info->index_->GetKeyAttrs();
       index_info->index_->DeleteEntry(delete_tuple.KeyFromTuple(schema, key_schema, key_attrs), delete_tuple.GetRid(),
                                       exec_ctx_->GetTransaction());
+      // insert index write record into transaction
+      IndexWriteRecord index_write_record = {child_rid,    plan_->TableOid(),      WType::DELETE,
+                                             delete_tuple, index_info->index_oid_, exec_ctx_->GetCatalog()};
+      txn_->AppendIndexWriteRecord(index_write_record);
     }
   }
   values.emplace_back(TypeId::INTEGER, delete_cnt);

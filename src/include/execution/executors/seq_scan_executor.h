@@ -53,5 +53,8 @@ class SeqScanExecutor : public AbstractExecutor {
   const SeqScanPlanNode *plan_;
   TableInfo *table_info_{nullptr};
   std::unique_ptr<TableIterator> table_iter_;
+  /** Transaction related */
+  Transaction *txn_{nullptr};
+  LockManager *lock_mgr_{nullptr};
 };
 }  // namespace bustub

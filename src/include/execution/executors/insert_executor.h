@@ -60,6 +60,9 @@ class InsertExecutor : public AbstractExecutor {
   const TableInfo *table_info_;
   std::unique_ptr<AbstractExecutor> child_executor_;
   bool finished_;
+  /** Transaction related */
+  Transaction *txn_{nullptr};
+  LockManager *lock_mgr_{nullptr};
 };
 
 }  // namespace bustub

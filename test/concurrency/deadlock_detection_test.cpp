@@ -12,7 +12,7 @@
 #include "gtest/gtest.h"
 
 namespace bustub {
-TEST(LockManagerDeadlockDetectionTest, DISABLED_EdgeTest) {
+TEST(LockManagerDeadlockDetectionTest, EdgeTest) {
   LockManager lock_mgr{};
   TransactionManager txn_mgr{&lock_mgr};
   lock_mgr.txn_manager_ = &txn_mgr;
@@ -57,7 +57,7 @@ TEST(LockManagerDeadlockDetectionTest, DISABLED_EdgeTest) {
   }
 }
 
-TEST(LockManagerDeadlockDetectionTest, DISABLED_BasicDeadlockDetectionTest) {
+TEST(LockManagerDeadlockDetectionTest, BasicDeadlockDetectionTest) {
   LockManager lock_mgr{};
   TransactionManager txn_mgr{&lock_mgr};
   lock_mgr.txn_manager_ = &txn_mgr;
@@ -117,5 +117,171 @@ TEST(LockManagerDeadlockDetectionTest, DISABLED_BasicDeadlockDetectionTest) {
 
   delete txn0;
   delete txn1;
+}
+
+TEST(LockManagerDeadlockDetectionTest, CyclesTest) {
+  LockManager lock_mgr{};
+  TransactionManager txn_mgr{&lock_mgr};
+  lock_mgr.txn_manager_ = &txn_mgr;
+  lock_mgr.StartDeadlockDetection();
+
+  table_oid_t oid0{0};
+  table_oid_t oid1{1};
+  table_oid_t oid2{2};
+  RID rid0{0, 0};
+  RID rid2{2, 2};
+  RID rid3{3, 3};
+  auto *txn0 = txn_mgr.Begin();
+  auto *txn1 = txn_mgr.Begin();
+  auto *txn2 = txn_mgr.Begin();
+  auto *txn3 = txn_mgr.Begin();
+  EXPECT_EQ(0, txn0->GetTransactionId());
+  EXPECT_EQ(1, txn1->GetTransactionId());
+  EXPECT_EQ(2, txn2->GetTransactionId());
+  EXPECT_EQ(3, txn3->GetTransactionId());
+  std::this_thread::sleep_for(cycle_detection_interval * 3);
+
+  std::thread t0([&] {
+    // Lock and sleep
+    bool res = lock_mgr.LockTable(txn0, LockManager::LockMode::INTENTION_SHARED, oid0);
+    res = lock_mgr.LockRow(txn0, LockManager::LockMode::SHARED, oid0, rid0);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(40));
+    res = lock_mgr.LockTable(txn0, LockManager::LockMode::INTENTION_SHARED, oid1);
+    EXPECT_EQ(true, res);
+
+    // lock_mgr.UnlockRow(txn0, toid, rid0);
+    // lock_mgr.UnlockTable(txn0, toid);
+
+    txn_mgr.Commit(txn0);
+    EXPECT_EQ(TransactionState::COMMITTED, txn0->GetState());
+  });
+
+  std::thread t1([&] {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    lock_mgr.LockTable(txn1, LockManager::LockMode::EXCLUSIVE, oid1);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(40));
+    lock_mgr.LockTable(txn1, LockManager::LockMode::SHARED_INTENTION_EXCLUSIVE, oid2);
+
+    txn_mgr.Commit(txn1);
+    EXPECT_EQ(TransactionState::COMMITTED, txn1->GetState());
+  });
+
+  std::thread t2([&] {
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    lock_mgr.LockTable(txn2, LockManager::LockMode::INTENTION_EXCLUSIVE, oid2);
+    lock_mgr.LockRow(txn2, LockManager::LockMode::EXCLUSIVE, oid2, rid2);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(40));
+    lock_mgr.LockTable(txn2, LockManager::LockMode::SHARED, oid1);
+    txn_mgr.Commit(txn2);
+    EXPECT_EQ(TransactionState::COMMITTED, txn2->GetState());
+  });
+
+  std::thread t3([&] {
+    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    lock_mgr.LockTable(txn3, LockManager::LockMode::INTENTION_EXCLUSIVE, oid2);
+    lock_mgr.LockRow(txn3, LockManager::LockMode::EXCLUSIVE, oid2, rid3);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(40));
+    lock_mgr.LockTable(txn3, LockManager::LockMode::INTENTION_EXCLUSIVE, oid0);
+    lock_mgr.LockRow(txn3, LockManager::LockMode::EXCLUSIVE, oid0, rid0);
+    txn_mgr.Commit(txn3);
+    EXPECT_EQ(TransactionState::COMMITTED, txn3->GetState());
+  });
+
+  // Sleep for enough time to break cycle
+  std::this_thread::sleep_for(cycle_detection_interval * 2);
+
+  t0.join();
+  t1.join();
+  t2.join();
+  t3.join();
+
+  delete txn0;
+  delete txn1;
+  delete txn2;
+  delete txn3;
+}
+
+TEST(LockManagerDeadlockDetectionTest, BasicTest) {
+  LockManager lock_mgr{};
+  TransactionManager txn_mgr{&lock_mgr};
+  lock_mgr.txn_manager_ = &txn_mgr;
+  lock_mgr.StartDeadlockDetection();
+
+  table_oid_t oid0{0};
+  // table_oid_t oid1{1};
+  // table_oid_t oid2{2};
+  RID rid0{0, 0};
+  RID rid1{1, 1};
+  RID rid2{2, 2};
+  RID rid3{3, 3};
+  auto *txn0 = txn_mgr.Begin();
+  auto *txn1 = txn_mgr.Begin();
+  auto *txn2 = txn_mgr.Begin();
+  auto *txn3 = txn_mgr.Begin();
+  EXPECT_EQ(0, txn0->GetTransactionId());
+  EXPECT_EQ(1, txn1->GetTransactionId());
+  EXPECT_EQ(2, txn2->GetTransactionId());
+  EXPECT_EQ(3, txn3->GetTransactionId());
+  std::this_thread::sleep_for(cycle_detection_interval * 3);
+
+  std::thread t0([&] {
+    // Lock and sleep
+    lock_mgr.LockTable(txn0, LockManager::LockMode::INTENTION_SHARED, oid0);
+    lock_mgr.LockRow(txn0, LockManager::LockMode::SHARED, oid0, rid0);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(40));
+    // lock_mgr.UnlockRow(txn0, toid, rid0);
+    // lock_mgr.UnlockTable(txn0, toid);
+
+    txn_mgr.Commit(txn0);
+    EXPECT_EQ(TransactionState::COMMITTED, txn0->GetState());
+  });
+
+  std::thread t1([&] {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    lock_mgr.LockTable(txn1, LockManager::LockMode::INTENTION_SHARED, oid0);
+    lock_mgr.LockRow(txn1, LockManager::LockMode::SHARED, oid0, rid1);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(40));
+    txn_mgr.Commit(txn1);
+    EXPECT_EQ(TransactionState::COMMITTED, txn1->GetState());
+  });
+
+  std::thread t2([&] {
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    lock_mgr.LockTable(txn2, LockManager::LockMode::INTENTION_SHARED, oid0);
+    lock_mgr.LockRow(txn2, LockManager::LockMode::SHARED, oid0, rid2);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(40));
+    txn_mgr.Commit(txn2);
+    EXPECT_EQ(TransactionState::COMMITTED, txn2->GetState());
+  });
+
+  std::thread t3([&] {
+    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    lock_mgr.LockTable(txn3, LockManager::LockMode::INTENTION_SHARED, oid0);
+    lock_mgr.LockRow(txn3, LockManager::LockMode::SHARED, oid0, rid3);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(40));
+    txn_mgr.Commit(txn3);
+    EXPECT_EQ(TransactionState::COMMITTED, txn3->GetState());
+  });
+
+  // Sleep for enough time to break cycle
+  std::this_thread::sleep_for(cycle_detection_interval * 2);
+
+  t0.join();
+  t1.join();
+  t2.join();
+  t3.join();
+
+  delete txn0;
+  delete txn1;
+  delete txn2;
+  delete txn3;
 }
 }  // namespace bustub

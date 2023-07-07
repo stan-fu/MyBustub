@@ -22,6 +22,18 @@ InsertExecutor::InsertExecutor(ExecutorContext *exec_ctx, const InsertPlanNode *
 
 void InsertExecutor::Init() {
   child_executor_->Init();
+  txn_ = exec_ctx_->GetTransaction();
+  lock_mgr_ = exec_ctx_->GetLockManager();
+  bool success;
+  try {
+    success = lock_mgr_->LockTable(txn_, LockManager::LockMode::EXCLUSIVE, plan_->TableOid());
+  } catch (TransactionAbortException &e) {
+    fmt::print("{}", e.GetInfo());
+    throw e;
+  }
+  if (!success) {
+    throw ExecutionException("LockTable Failed");
+  }
   table_info_ = exec_ctx_->GetCatalog()->GetTable(plan_->TableOid());
   finished_ = false;
 }
@@ -33,15 +45,19 @@ auto InsertExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   finished_ = true;
 
   Tuple insert_tuple{};
-  TupleMeta meta{0, 0, false};
+  TupleMeta meta{txn_->GetTransactionId(), 0, false};
   int32_t insert_cnt = 0;
   std::vector<Value> values;
 
-  // insert tuple
   while (child_executor_->Next(&insert_tuple, rid)) {
-    auto insert_rid = table_info_->table_->InsertTuple(meta, insert_tuple);
+    // insert tuple
+    auto insert_rid = table_info_->table_->InsertTuple(meta, insert_tuple, lock_mgr_, txn_, plan_->TableOid());
     insert_cnt++;
-    // insert index
+    // insert table write record
+    TableWriteRecord table_write_record = {plan_->TableOid(), *insert_rid, table_info_->table_.get()};
+    table_write_record.wtype_ = WType::INSERT;
+    txn_->AppendTableWriteRecord(table_write_record);
+    // insert index from tuple into all indexes
     auto indexes = exec_ctx_->GetCatalog()->GetTableIndexes(table_info_->name_);
     for (auto index_info : indexes) {
       auto schema = table_info_->schema_;
@@ -49,6 +65,10 @@ auto InsertExecutor::Next(Tuple *tuple, RID *rid) -> bool {
       auto key_attrs = index_info->index_->GetKeyAttrs();
       index_info->index_->InsertEntry(insert_tuple.KeyFromTuple(schema, key_schema, key_attrs), *insert_rid,
                                       exec_ctx_->GetTransaction());
+      // insert index write record
+      IndexWriteRecord index_write_record = {*insert_rid,  plan_->TableOid(),      WType::INSERT,
+                                             insert_tuple, index_info->index_oid_, exec_ctx_->GetCatalog()};
+      txn_->AppendIndexWriteRecord(index_write_record);
     }
   }
   values.emplace_back(TypeId::INTEGER, insert_cnt);
