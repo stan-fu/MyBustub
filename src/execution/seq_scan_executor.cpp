@@ -37,8 +37,8 @@ void SeqScanExecutor::Init() {
 
 auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   while (!table_iter_->IsEnd()) {
-    auto tupleMeta = table_iter_->GetTuple().first;
-    if (tupleMeta.is_deleted_) {
+    auto tuple_meta = table_iter_->GetTuple().first;
+    if (tuple_meta.is_deleted_) {
       ++(*table_iter_);
       continue;
     }

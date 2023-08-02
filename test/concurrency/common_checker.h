@@ -274,9 +274,9 @@ void ExpectTwoTxn(const std::string &test_name, IsolationLevel read_txn_level, I
       break;
     case ExpectedOutcome::BlockOnWrite:
       // TODO(student): if you are using a debugger, you probably want to uncomment this line.
-      // future.wait();
+      future.wait();
 
-      EXPECT_FALSE(future.wait_for(std::chrono::seconds(1)) == std::future_status::ready);
+      EXPECT_FALSE(future.wait_for(std::chrono::seconds(10)) == std::future_status::ready);
       instance->txn_manager_->Commit(txn_r);
       delete txn_r;
       thread_may_block.join();
@@ -286,7 +286,7 @@ void ExpectTwoTxn(const std::string &test_name, IsolationLevel read_txn_level, I
 }
 
 const bool READ_BEFORE_WRITE = true;
-const bool IS_INSERT = false;
+const bool IS_INSERT = true;
 const bool IS_DELETE = true;
 
 }  // namespace bustub

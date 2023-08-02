@@ -55,4 +55,29 @@ TEST(IsolationLevelTest, InsertTestA) {
                ExpectedOutcome::DirtyRead);
 }
 
+/**
+ * @brief Construct a new TEST object
+ * 1. --force-enable-update=false --force-create-index=false
+ * 2. x: create index disabled
+x: use insert + delete
+x: benchmark for 30000ms
+x: nft_num=10
+x: initialize data
+x: benchmark start
+ *
+ */
+TEST(DebugModeTest, TEST1) {
+  // use insert + delete and benchmark for 30000ms, nft_num=10
+  ExpectTwoTxn("TEST1", IsolationLevel::READ_UNCOMMITTED, IsolationLevel::READ_UNCOMMITTED, false, IS_INSERT,
+               ExpectedOutcome::DirtyRead);
+  ExpectTwoTxn("TEST2", IsolationLevel::READ_COMMITTED, IsolationLevel::READ_COMMITTED, false, IS_INSERT,
+               ExpectedOutcome::BlockOnRead);
+  ExpectTwoTxn("TEST3", IsolationLevel::READ_UNCOMMITTED, IsolationLevel::READ_UNCOMMITTED, false, IS_INSERT,
+               ExpectedOutcome::BlockOnWrite);
+  ExpectTwoTxn("TEST4", IsolationLevel::REPEATABLE_READ, IsolationLevel::REPEATABLE_READ, false, IS_INSERT,
+               ExpectedOutcome::BlockOnRead);
+  ExpectTwoTxn("TEST5", IsolationLevel::REPEATABLE_READ, IsolationLevel::REPEATABLE_READ, false, IS_INSERT,
+               ExpectedOutcome::BlockOnWrite);
+}
+
 }  // namespace bustub
