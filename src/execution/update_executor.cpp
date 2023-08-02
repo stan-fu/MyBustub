@@ -44,6 +44,7 @@ auto UpdateExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     // mark tuple as delete
     auto meta = table_info_->table_->GetTupleMeta(child_rid);
     meta.is_deleted_ = true;
+    meta.delete_txn_id_ = exec_ctx_->GetTransaction()->GetTransactionId();
     table_info_->table_->UpdateTupleMeta(meta, child_rid);
     // Compute expressions
     std::vector<Value> child_values;
@@ -52,7 +53,7 @@ auto UpdateExecutor::Next(Tuple *tuple, RID *rid) -> bool {
       child_values.push_back(expr->Evaluate(&delete_tuple, child_executor_->GetOutputSchema()));
     }
     // insert tuple
-    meta = {0, 0, false};
+    meta = {exec_ctx_->GetTransaction()->GetTransactionId(), 0, false};
     auto insert_tuple = Tuple(child_values, &(child_executor_->GetOutputSchema()));
     auto insert_rid = table_info_->table_->InsertTuple(meta, insert_tuple);
 

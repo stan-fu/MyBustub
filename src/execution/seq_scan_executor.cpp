@@ -37,6 +37,11 @@ void SeqScanExecutor::Init() {
 
 auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   while (!table_iter_->IsEnd()) {
+    auto tupleMeta = table_iter_->GetTuple().first;
+    if (tupleMeta.is_deleted_) {
+      ++(*table_iter_);
+      continue;
+    }
     if (exec_ctx_->IsDelete()) {
       lock_mgr_->LockRow(txn_, LockManager::LockMode::EXCLUSIVE, plan_->GetTableOid(), table_iter_->GetRID());
     } else if (txn_->GetIsolationLevel() != IsolationLevel::READ_UNCOMMITTED) {

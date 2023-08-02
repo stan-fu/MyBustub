@@ -45,6 +45,7 @@ auto DeleteExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     // mark tuple as delete
     auto meta = table_info_->table_->GetTupleMeta(child_rid);
     meta.is_deleted_ = true;
+    meta.delete_txn_id_ = txn_->GetTransactionId();
     table_info_->table_->UpdateTupleMeta(meta, child_rid);
     ++delete_cnt;
     // insert table write record into transaction
