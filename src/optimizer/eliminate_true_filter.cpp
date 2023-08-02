@@ -18,7 +18,7 @@ auto Optimizer::OptimizeEliminateTrueFilter(const AbstractPlanNodeRef &plan) -> 
 
   if (optimized_plan->GetType() == PlanType::Filter) {
     const auto &filter_plan = dynamic_cast<const FilterPlanNode &>(*optimized_plan);
-    if (IsPredicateTrue(filter_plan.GetPredicate())) {
+    if (IsPredicateTrue(filter_plan.GetPredicate())) {  // 表达式永远为true，直接返回子节点
       BUSTUB_ASSERT(optimized_plan->children_.size() == 1, "must have exactly one children");
       return optimized_plan->children_[0];
     }

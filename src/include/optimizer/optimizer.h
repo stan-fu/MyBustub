@@ -101,6 +101,27 @@ class Optimizer {
    */
   auto EstimatedCardinality(const std::string &table_name) -> std::optional<size_t>;
 
+  /**
+   * @brief switch join order if the left plan is smaller than the right plan
+   *
+   * @param plan
+   * @return AbstractPlanNodeRef
+   */
+  auto OptimizeJoinOrder(const AbstractPlanNodeRef &plan) -> std::optional<size_t>;
+
+  /**
+   * @brief push down filter to the lowest possible position
+   *
+   * @param plan
+   * @return AbstractPlanNodeRef
+   */
+  auto OptimizePushDown(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
+
+  /**
+   * @brief rewrite expression tree for push down
+   */
+  auto RewriteExpressionForPushDown(const std::vector<AbstractExpressionRef> &exprs) -> AbstractExpressionRef;
+
   /** Catalog will be used during the planning process. USERS SHOULD ENSURE IT OUTLIVES
    * OPTIMIZER, otherwise it's a dangling reference.
    */

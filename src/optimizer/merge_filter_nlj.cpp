@@ -24,11 +24,12 @@ auto Optimizer::RewriteExpressionForJoin(const AbstractExpressionRef &expr, size
   if (const auto *column_value_expr = dynamic_cast<const ColumnValueExpression *>(expr.get());
       column_value_expr != nullptr) {
     BUSTUB_ENSURE(column_value_expr->GetTupleIdx() == 0, "tuple_idx cannot be value other than 0 before this stage.")
+    // eg: {#0.1, #0.2, #0.3, #0.4} -> {#0.1, #0.2}, {#1.1, #1.2}
     auto col_idx = column_value_expr->GetColIdx();
-    if (col_idx < left_column_cnt) {
+    if (col_idx < left_column_cnt) {  // left child
       return std::make_shared<ColumnValueExpression>(0, col_idx, column_value_expr->GetReturnType());
     }
-    if (col_idx >= left_column_cnt && col_idx < left_column_cnt + right_column_cnt) {
+    if (col_idx >= left_column_cnt && col_idx < left_column_cnt + right_column_cnt) {  // right child
       return std::make_shared<ColumnValueExpression>(1, col_idx - left_column_cnt, column_value_expr->GetReturnType());
     }
     throw bustub::Exception("col_idx not in range");
@@ -36,6 +37,7 @@ auto Optimizer::RewriteExpressionForJoin(const AbstractExpressionRef &expr, size
   return expr->CloneWithChildren(children);
 }
 
+// return true if the expression is always true
 auto Optimizer::IsPredicateTrue(const AbstractExpressionRef &expr) -> bool {
   if (const auto *const_expr = dynamic_cast<const ConstantValueExpression *>(expr.get()); const_expr != nullptr) {
     return const_expr->val_.CastAs(TypeId::BOOLEAN).GetAs<bool>();
@@ -61,7 +63,7 @@ auto Optimizer::OptimizeMergeFilterNLJ(const AbstractPlanNodeRef &plan) -> Abstr
       BUSTUB_ENSURE(child_plan->GetChildren().size() == 2, "NLJ should have exactly 2 children.");
 
       if (IsPredicateTrue(nlj_plan.Predicate())) {
-        // Only rewrite when NLJ has always true predicate.
+        // Only rewrite when NLJ has always true predicate. full NLJ will always return true.
         return std::make_shared<NestedLoopJoinPlanNode>(
             filter_plan.output_schema_, nlj_plan.GetLeftPlan(), nlj_plan.GetRightPlan(),
             RewriteExpressionForJoin(filter_plan.GetPredicate(),

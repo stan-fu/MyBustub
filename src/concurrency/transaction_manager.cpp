@@ -24,7 +24,7 @@ namespace bustub {
 
 void TransactionManager::Commit(Transaction *txn) {
   // Release all the locks.
-  fmt::print("Commit(txn = {})\n", txn->GetTransactionId());
+  // fmt::print("Commit(txn = {})\n", txn->GetTransactionId());
   ReleaseLocks(txn);
 
   txn->SetState(TransactionState::COMMITTED);
@@ -32,7 +32,7 @@ void TransactionManager::Commit(Transaction *txn) {
 
 void TransactionManager::Abort(Transaction *txn) {
   /* TODO: revert all the changes in write set */
-  fmt::print("Abort(txn = {})\n", txn->GetTransactionId());
+  // fmt::print("Abort(txn = {})\n", txn->GetTransactionId());
   ReleaseLocks(txn);
   auto table_write_set = txn->GetWriteSet();
   auto index_write_set = txn->GetIndexWriteSet();

@@ -24,16 +24,9 @@ void InsertExecutor::Init() {
   child_executor_->Init();
   txn_ = exec_ctx_->GetTransaction();
   lock_mgr_ = exec_ctx_->GetLockManager();
-  bool success;
-  try {
-    success = lock_mgr_->LockTable(txn_, LockManager::LockMode::EXCLUSIVE, plan_->TableOid());
-  } catch (TransactionAbortException &e) {
-    fmt::print("{}", e.GetInfo());
-    throw e;
-  }
-  if (!success) {
-    throw ExecutionException("LockTable Failed");
-  }
+
+  lock_mgr_->LockTable(txn_, LockManager::LockMode::INTENTION_EXCLUSIVE, plan_->TableOid());
+
   table_info_ = exec_ctx_->GetCatalog()->GetTable(plan_->TableOid());
   finished_ = false;
 }

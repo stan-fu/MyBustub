@@ -44,6 +44,10 @@ auto Optimizer::OptimizeNLJAsHashJoin(const AbstractPlanNodeRef &plan) -> Abstra
   }
 
   if (key_expressions[0]->children_.empty()) {  // t1.a = t2.a
+    auto cmp_expr = dynamic_cast<ComparisonExpression *>(nlj_plan.Predicate().get());
+    if (cmp_expr == nullptr || cmp_expr->comp_type_ != ComparisonType::Equal) {
+      return optimized_plan;
+    }
     for (auto const &expr : key_expressions) {
       if (dynamic_cast<ColumnValueExpression *>(expr.get())->GetTupleIdx() == 0) {
         left_exprs.emplace_back(expr);
@@ -53,14 +57,25 @@ auto Optimizer::OptimizeNLJAsHashJoin(const AbstractPlanNodeRef &plan) -> Abstra
     }
   } else {  // t1.a = t2.a and t1.b = t2.b and ...
     for (auto const &exprs : key_expressions) {
+      auto cmp_expr = dynamic_cast<ComparisonExpression *>(exprs.get());
+      if (cmp_expr == nullptr || cmp_expr->comp_type_ != ComparisonType::Equal) {
+        continue;
+      }
       for (auto const &expr : exprs->GetChildren()) {
-        if (dynamic_cast<ColumnValueExpression *>(expr.get())->GetTupleIdx() == 0) {
+        auto col_expr = dynamic_cast<ColumnValueExpression *>(expr.get());
+        if (col_expr == nullptr) {
+          break;
+        }
+        if (col_expr->GetTupleIdx() == 0) {
           left_exprs.emplace_back(expr);
         } else {
           right_exprs.emplace_back(expr);
         }
       }
     }
+  }
+  if (left_exprs.empty() || right_exprs.empty()) {
+    return optimized_plan;
   }
   return std::make_shared<HashJoinPlanNode>(nlj_plan.output_schema_, optimized_plan->GetChildAt(0),
                                             optimized_plan->GetChildAt(1), left_exprs, right_exprs,
