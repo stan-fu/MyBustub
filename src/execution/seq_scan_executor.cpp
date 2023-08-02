@@ -24,10 +24,9 @@ void SeqScanExecutor::Init() {
   lock_mgr_ = exec_ctx_->GetLockManager();
 
   if (exec_ctx_->IsDelete()) {
-    lock_mgr_->LockTable(txn_, LockManager::LockMode::EXCLUSIVE, plan_->GetTableOid());
+    lock_mgr_->LockTable(txn_, LockManager::LockMode::INTENTION_EXCLUSIVE, plan_->GetTableOid());
   } else if (txn_->GetIsolationLevel() != IsolationLevel::READ_UNCOMMITTED) {
-    if (!txn_->IsTableExclusiveLocked(plan_->GetTableOid()) &&
-        !txn_->IsTableIntentionExclusiveLocked(plan_->GetTableOid())) {
+    if (!txn_->IsTableIntentionExclusiveLocked(plan_->GetTableOid())) {
       lock_mgr_->LockTable(txn_, LockManager::LockMode::INTENTION_SHARED, plan_->GetTableOid());
     }
   }
@@ -39,8 +38,11 @@ auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   while (!table_iter_->IsEnd()) {
     auto tuple_meta = table_iter_->GetTuple().first;
     if (tuple_meta.is_deleted_) {
-      ++(*table_iter_);
-      continue;
+      if (txn_->GetIsolationLevel() != IsolationLevel::REPEATABLE_READ ||
+          txn_->GetTransactionId() == tuple_meta.delete_txn_id_) {
+        ++(*table_iter_);
+        continue;
+      }
     }
     if (exec_ctx_->IsDelete()) {
       lock_mgr_->LockRow(txn_, LockManager::LockMode::EXCLUSIVE, plan_->GetTableOid(), table_iter_->GetRID());

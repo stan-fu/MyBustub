@@ -25,7 +25,9 @@ void InsertExecutor::Init() {
   txn_ = exec_ctx_->GetTransaction();
   lock_mgr_ = exec_ctx_->GetLockManager();
 
-  lock_mgr_->LockTable(txn_, LockManager::LockMode::INTENTION_EXCLUSIVE, plan_->TableOid());
+  if (!txn_->IsTableExclusiveLocked(plan_->TableOid())) {
+    lock_mgr_->LockTable(txn_, LockManager::LockMode::INTENTION_EXCLUSIVE, plan_->TableOid());
+  }
 
   table_info_ = exec_ctx_->GetCatalog()->GetTable(plan_->TableOid());
   finished_ = false;

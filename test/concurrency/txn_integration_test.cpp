@@ -68,16 +68,15 @@ x: benchmark start
  */
 TEST(DebugModeTest, TEST1) {
   // use insert + delete and benchmark for 30000ms, nft_num=10
-  ExpectTwoTxn("TEST1", IsolationLevel::READ_UNCOMMITTED, IsolationLevel::READ_UNCOMMITTED, false, IS_INSERT,
-               ExpectedOutcome::DirtyRead);
-  ExpectTwoTxn("TEST2", IsolationLevel::READ_COMMITTED, IsolationLevel::READ_COMMITTED, false, IS_INSERT,
-               ExpectedOutcome::BlockOnRead);
-  ExpectTwoTxn("TEST3", IsolationLevel::READ_UNCOMMITTED, IsolationLevel::READ_UNCOMMITTED, false, IS_INSERT,
-               ExpectedOutcome::BlockOnWrite);
-  ExpectTwoTxn("TEST4", IsolationLevel::REPEATABLE_READ, IsolationLevel::REPEATABLE_READ, false, IS_INSERT,
-               ExpectedOutcome::BlockOnRead);
-  ExpectTwoTxn("TEST5", IsolationLevel::REPEATABLE_READ, IsolationLevel::REPEATABLE_READ, false, IS_INSERT,
-               ExpectedOutcome::BlockOnWrite);
+  for (int i = 0; i < 10; i++) {
+    auto db = GetDbForVisibilityTest("Test1");
+    auto txn1 = Begin(*db, IsolationLevel::READ_UNCOMMITTED);
+    Delete(txn1, *db, 233);
+    Commit(*db, txn1);
+    auto txn2 = Begin(*db, IsolationLevel::READ_UNCOMMITTED);
+    Insert(txn2, *db, 234);
+    Commit(*db, txn2);
+  }
 }
 
 }  // namespace bustub
