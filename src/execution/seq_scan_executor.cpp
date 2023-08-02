@@ -31,7 +31,7 @@ void SeqScanExecutor::Init() {
     }
   }
   table_info_ = exec_ctx_->GetCatalog()->GetTable(plan_->GetTableOid());
-  table_iter_ = std::make_unique<TableIterator>(table_info_->table_->MakeIterator());
+  table_iter_ = std::make_unique<TableIterator>(table_info_->table_->MakeEagerIterator());
 }
 
 auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
